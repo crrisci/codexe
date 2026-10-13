@@ -97,3 +97,6 @@ __pycache__/
 
 # Private native inference test artifacts
 .test-artifacts/
+
+# Private local verification report
+/XENOLITH-VERIFICATION.md

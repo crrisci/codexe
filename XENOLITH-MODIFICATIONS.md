@@ -54,7 +54,7 @@ formats or reproducible generators do not carry hand-written source comments.
 - `sdk/python/src/openai_codex/generated/v2_all.py`
 
 Additional fork-specific files: README.md, README-UPSTREAM.md, .gitignore, XENOLITH.md,
-XENOLITH-VERIFICATION.md, XENOLITH-MODIFICATIONS.md, xenolith/tests/, and
+XENOLITH-MODIFICATIONS.md, xenolith/tests/, and
 .github/workflows/xenolith-native.yml. Their additions are Apache-2.0.
 
 README-UPSTREAM.md is an unchanged copy of the baseline upstream README, retained for reference.

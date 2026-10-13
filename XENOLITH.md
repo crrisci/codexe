@@ -7,7 +7,7 @@ No HTTP adapter is required. Codex still owns the agent loop, shell tools, appro
 and conversation history. Xenolith owns inference, native sessions and KV snapshots.
 
 Baseline: `rust-v0.162.1`, commit `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`.
-See [verification and limits](XENOLITH-VERIFICATION.md).
+Current limitations are listed below.
 
 ## Build
 
@@ -33,7 +33,7 @@ validated in this milestone, although wire/backend tests passed on macOS.
 
 Start your compiled Xenolith explicitly with isolated state/cache directories.
 Use the served model and context capacity reported by its `describe` operation.
-For example, the real validation used Xenolith LNL with a Gemma GGUF and context 65536:
+For example, with a GGUF model and a configured context of 65536:
 
 ```sh
 /path/to/xenolith serve /path/to/model.gguf --ctx 65536 \
@@ -55,7 +55,7 @@ mkdir -p "$CODEX_HOME" "$XENOLITH_STATE_DIR"
 Write `$CODEX_HOME/config.toml` with the exact model identifier returned by Xenolith:
 
 ```toml
-model = "gemma-4-26B-A4B-it-qat"
+model = "YOUR_SERVED_MODEL"
 model_provider = "xenolith"
 model_context_window = 65536
 model_reasoning_effort = "none"
@@ -124,8 +124,6 @@ XENOCODEX_NATIVE_CODEX_BIN="$PWD/codex-rs/target/debug/codex" \
 The CLI acceptance tests require Node >=22 and the rebuilt fork. They use isolated
 homes and a simulated wire server, exercising real tool execution and resume after
 an interrupted tool-result append. They do not prove real KV restoration.
-The real-model harness is maintained in the companion Xenocodex project; its final
-Intel/WSL outcomes and remaining limitations are recorded in XENOLITH-VERIFICATION.md.
 GitHub CI checks the isolated wire/backend tests and acceptance script syntax;
 it does not load a real model or execute the full upstream suite.
 

@@ -4,7 +4,7 @@ Use Codex CLI with a local Xenolith engine through its native wire protocol.
 This community fork preserves Codex's agent loop, tools, sandbox and approvals,
 while exposing the state of local inference and keeping durable KV sessions.
 
-[Setup guide](XENOLITH.md) · [Verified behavior and limits](XENOLITH-VERIFICATION.md) · [Modification notices](XENOLITH-MODIFICATIONS.md)
+[Setup guide](XENOLITH.md) · [Modification notices](XENOLITH-MODIFICATIONS.md)
 
 ## Why native integration?
 
@@ -51,20 +51,6 @@ XENOLITH_STATE_DIR=/absolute/private/codex-bindings \
 
 Keep the Codex home, native bindings and Xenolith state/cache to resume conversations.
 The provider connects to an existing engine; it does not implicitly start or stop it.
-
-## What has been verified?
-
-| Environment | Coverage |
-|---|---|
-| Mac and WSL, simulated wire | 25 Rust framing/backend tests |
-| Rebuilt CLI and simulated wire | Actual tool/result round trip, client resume and crash without duplicated tool effects |
-| TUI and API | Thread routing/rendering, native notification schemas and CLI exports |
-| Intel/WSL, Xenolith LNL and Gemma GGUF | Read/edit/run a program, restart client and engine with KV restored, rewind, manual compaction, missing/corrupt snapshots and crash recovery |
-| GitHub CI | Native wire/backend tests, formatting and acceptance script syntax |
-
-The real battery used `gemma-4-26B-A4B-it-qat` with context **65536**.
-Simulator and CI results do not establish real-model speed or KV persistence;
-those were checked separately on the Intel machine. See the [verification report](XENOLITH-VERIFICATION.md).
 
 ## Current limits
 
