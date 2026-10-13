@@ -647,3 +647,4 @@ export type { WorkspaceMessage } from "./WorkspaceMessage";
 export type { WorkspaceMessageType } from "./WorkspaceMessageType";
 export type { WorkspaceRouting } from "./WorkspaceRouting";
 export type { WriteStatus } from "./WriteStatus";
+export type { XenolithInferenceNotification } from "./XenolithInferenceNotification";

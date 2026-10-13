@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 //! Defines the protocol for a Codex session between a client and an agent.
 //!
 //! Uses a SQ (Submission Queue) / EQ (Event Queue) pattern to asynchronously communicate
@@ -1372,6 +1375,8 @@ pub struct EnvironmentConnectionEvent {
 #[ts(tag = "type")]
 #[strum(serialize_all = "snake_case")]
 pub enum EventMsg {
+    /// Local inference telemetry, separate from model messages.
+    XenolithInference(XenolithInferenceEvent),
     /// Error while executing a submission
     Error(ErrorEvent),
 
@@ -6439,4 +6444,11 @@ mod tests {
 
         assert_eq!(info.model_context_window, Some(258_400));
     }
+}
+
+/// Provider-local progress and cache information. Missing values stay unavailable.
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+pub struct XenolithInferenceEvent {
+    pub phase: String,
+    pub details: String,
 }

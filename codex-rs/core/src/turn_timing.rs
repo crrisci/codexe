@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -394,7 +397,8 @@ fn response_event_records_turn_ttft(event: &ResponseEvent) -> bool {
         | ResponseEvent::ReasoningSummaryDelta { .. }
         | ResponseEvent::ReasoningSummaryDone { .. }
         | ResponseEvent::ReasoningContentDelta { .. } => true,
-        ResponseEvent::Created { .. }
+        ResponseEvent::XenolithInference(_)
+        | ResponseEvent::Created { .. }
         | ResponseEvent::ServerModel(_)
         | ResponseEvent::ModelVerifications(_)
         | ResponseEvent::TurnModerationMetadata(_)

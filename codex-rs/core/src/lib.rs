@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 //! Root of the `codex-core` library.
 
 // Prevent accidental direct writes to stdout/stderr in library code. All
@@ -15,6 +18,8 @@ mod realtime_conversation;
 mod realtime_history;
 mod realtime_prompt;
 mod responses_headers;
+#[cfg(unix)]
+mod xenolith;
 pub use responses_headers::CodexResponsesHeaders;
 mod responses_metadata;
 mod responses_retry;

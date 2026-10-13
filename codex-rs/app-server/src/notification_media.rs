@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use codex_app_server_protocol::DynamicToolCallOutputContentItem;
 use codex_app_server_protocol::ServerNotification;
 use codex_app_server_protocol::ThreadItem;
@@ -115,6 +118,7 @@ pub(crate) fn without_notification_media(notification: ServerNotification) -> Se
         | ServerNotification::AuthRecoveryStarted(_)
         | ServerNotification::AuthRecoveryCompleted(_)
         | ServerNotification::TurnModerationMetadata(_)
+        | ServerNotification::XenolithInference(_)
         | ServerNotification::ModelSafetyBufferingUpdated(_)
         | ServerNotification::Warning(_)
         | ServerNotification::GuardianWarning(_)

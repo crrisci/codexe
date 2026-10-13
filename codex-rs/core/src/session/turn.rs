@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -2096,7 +2099,8 @@ pub(super) fn realtime_text_for_event(msg: &EventMsg) -> Option<RealtimeEventTex
                 .ok()
                 .map(|request| RealtimeEventText::Handoff(format!("{message}\n\n{request}"), None))
         }
-        EventMsg::Error(_)
+        EventMsg::XenolithInference(_)
+        | EventMsg::Error(_)
         | EventMsg::Warning(_)
         | EventMsg::AuthRecoveryStarted(_)
         | EventMsg::AuthRecoveryCompleted(_)
@@ -2668,6 +2672,21 @@ async fn try_run_sampling_request(
         record_turn_ttft_metric(&turn_context, &event).await;
 
         match event {
+            ResponseEvent::XenolithInference(value) => {
+                #[cfg(unix)]
+                {
+                    let (phase, details) = codex_xenolith_wire::backend::presentation(&value);
+                    sess.send_event(
+                        &turn_context,
+                        EventMsg::XenolithInference(
+                            codex_protocol::protocol::XenolithInferenceEvent { phase, details },
+                        ),
+                    )
+                    .await;
+                }
+                #[cfg(not(unix))]
+                let _ = value;
+            }
             ResponseEvent::Created { response_id } => {
                 if let Some(response_id) = response_id {
                     turn_context

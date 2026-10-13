@@ -6709,6 +6709,16 @@ class WriteStatus(Enum):
     ok_overridden = "okOverridden"
 
 
+class XenolithInferenceNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    details: str
+    phase: str
+    thread_id: Annotated[str, Field(alias="threadId")]
+    turn_id: Annotated[str, Field(alias="turnId")]
+
+
 class ChatgptAccount(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -9536,6 +9546,23 @@ class AccountGatewayOAuthChangedServerNotification(BaseModel):
         Field(title="Account/gatewayOAuth/changedNotificationMethod"),
     ]
     params: GatewayOAuthChangedNotification
+
+
+class XenolithInferenceServerNotification(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    emitted_at_ms: Annotated[
+        int | None,
+        Field(
+            alias="emittedAtMs",
+            description="Unix timestamp (in milliseconds) when app-server emitted this notification.",
+        ),
+    ] = None
+    method: Annotated[
+        Literal["xenolith/inference"], Field(title="Xenolith/inferenceNotificationMethod")
+    ]
+    params: XenolithInferenceNotification
 
 
 class TurnModerationMetadataServerNotification(BaseModel):
@@ -13121,6 +13148,7 @@ class ServerNotification(
         | ModelVerificationServerNotification
         | ModelProviderAuthRecoveryStartedServerNotification
         | ModelProviderAuthRecoveryCompletedServerNotification
+        | XenolithInferenceServerNotification
         | TurnModerationMetadataServerNotification
         | ModelSafetyBufferingUpdatedServerNotification
         | WarningServerNotification
@@ -13211,6 +13239,7 @@ class ServerNotification(
         | ModelVerificationServerNotification
         | ModelProviderAuthRecoveryStartedServerNotification
         | ModelProviderAuthRecoveryCompletedServerNotification
+        | XenolithInferenceServerNotification
         | TurnModerationMetadataServerNotification
         | ModelSafetyBufferingUpdatedServerNotification
         | WarningServerNotification

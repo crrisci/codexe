@@ -1,0 +1,27 @@
+# Xenolith native integration, Copyright (c) 2026 Francesco Pio Crisci.
+# SPDX-License-Identifier: Apache-2.0
+name: Xenolith native
+on:
+  push:
+    branches: [xenolith-native]
+  pull_request:
+    branches: [xenolith-native]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  wire:
+    name: Native wire and backend tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Prepare Rust
+        run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt
+      - name: Native wire and backend tests
+        run: cargo +1.95.0 test --manifest-path codex-rs/xenolith-wire/Cargo.toml
+      - name: Check native formatting
+        run: cargo +1.95.0 fmt --manifest-path codex-rs/xenolith-wire/Cargo.toml --check
+      - name: Check acceptance script syntax
+        run: |
+          node --check xenolith/tests/test-codex.mjs
+          node --check xenolith/tests/test-crash-tool.mjs

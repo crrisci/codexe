@@ -1,3 +1,19 @@
+# Codex with native Xenolith inference
+
+This community fork adds a direct Xenolith Unix-socket provider to Codex CLI.
+The `xenolith-native` branch is based on upstream `rust-v0.162.1`.
+
+- [Build, configure and run](XENOLITH.md)
+- [Verified behavior and current limits](XENOLITH-VERIFICATION.md)
+- [Modification notices](XENOLITH-MODIFICATIONS.md)
+
+Development source release: compile this branch to use the native provider.
+The upstream npm package and desktop download below do not include this integration.
+The fork and native changes use Apache-2.0; upstream LICENSE and NOTICE are retained.
+This fork is maintained independently of OpenAI.
+
+---
+
 <p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
 <p align="center">
   <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />

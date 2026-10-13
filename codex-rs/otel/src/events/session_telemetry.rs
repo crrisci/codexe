@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use crate::TelemetryAuthMode;
 use crate::ToolDecisionSource;
 use crate::events::shared::log_and_trace_event;
@@ -1393,6 +1396,7 @@ impl SessionTelemetry {
 
     fn responses_type(event: &ResponseEvent) -> String {
         match event {
+            ResponseEvent::XenolithInference(_) => "xenolith_inference".into(),
             ResponseEvent::Created { .. } => "created".into(),
             ResponseEvent::OutputItemDone(item) | ResponseEvent::OutputItemAdded(item) => {
                 SessionTelemetry::responses_item_type(item)

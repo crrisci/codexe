@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 //! Thread targeting helpers for app-server requests and notifications.
 
 use codex_app_server_protocol::ServerNotification;
@@ -140,6 +143,9 @@ pub(super) fn server_notification_thread_target(
         ServerNotification::ContextCompacted(notification) => Some(notification.thread_id.as_str()),
         ServerNotification::ModelRerouted(notification) => Some(notification.thread_id.as_str()),
         ServerNotification::ModelVerification(notification) => {
+            Some(notification.thread_id.as_str())
+        }
+        ServerNotification::XenolithInference(notification) => {
             Some(notification.thread_id.as_str())
         }
         ServerNotification::ModelSafetyBufferingUpdated(notification) => {

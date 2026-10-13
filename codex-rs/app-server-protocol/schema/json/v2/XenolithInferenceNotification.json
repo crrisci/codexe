@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "details": {
+      "type": "string"
+    },
+    "phase": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "details",
+    "phase",
+    "threadId",
+    "turnId"
+  ],
+  "title": "XenolithInferenceNotification",
+  "type": "object"
+}

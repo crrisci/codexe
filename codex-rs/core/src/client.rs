@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 //! Session- and turn-scoped helpers for talking to model provider APIs.
 //!
 //! `ModelClient` is intended to live for the lifetime of a Codex session and holds the stable
@@ -2247,6 +2250,28 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let wire_api = self.client.state.provider.info().wire_api;
         match wire_api {
+            WireApi::Xenolith => {
+                #[cfg(unix)]
+                {
+                    crate::xenolith::stream(
+                        prompt,
+                        model_info,
+                        self.client.state.thread_id.to_string(),
+                        self.client.state.provider.info().base_url.as_deref(),
+                        effort,
+                    )
+                }
+                #[cfg(not(unix))]
+                {
+                    Err(
+                        codex_protocol::error::CodexErrorDetails::UnsupportedOperation(
+                            "Xenolith native backend requires a Unix socket; use WSL on Windows"
+                                .to_owned(),
+                        )
+                        .into(),
+                    )
+                }
+            }
             WireApi::Responses => {
                 if self.client.responses_websocket_enabled() {
                     let request_trace = current_span_w3c_trace_context();

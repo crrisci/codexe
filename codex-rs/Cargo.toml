@@ -1,4 +1,8 @@
+# Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+# Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 [workspace]
+exclude = ["xenolith-wire"]
 members = [
     "aws-auth",
     "analytics",

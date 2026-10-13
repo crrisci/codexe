@@ -94,3 +94,6 @@ CHANGELOG.ignore.md
 # Python bytecode files
 __pycache__/
 *.pyc
+
+# Private native inference test artifacts
+.test-artifacts/

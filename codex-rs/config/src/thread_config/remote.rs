@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::num::NonZeroU64;
@@ -314,6 +317,9 @@ fn proto_string_map(values: HashMap<String, RedactedString>) -> proto::StringMap
 fn proto_wire_api(wire_api: WireApi) -> proto::WireApi {
     match wire_api {
         WireApi::Responses => proto::WireApi::Responses,
+        WireApi::Xenolith => {
+            panic!("local Xenolith provider cannot be serialized as remote Responses")
+        }
     }
 }
 

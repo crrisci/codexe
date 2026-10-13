@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use super::*;
 
 impl ChatWidget {
@@ -44,6 +47,30 @@ impl ChatWidget {
             self.restore_retry_status_header_if_present();
         }
         match notification {
+            ServerNotification::XenolithInference(notification) => {
+                if self
+                    .thread_id()
+                    .is_some_and(|id| id.to_string() != notification.thread_id)
+                {
+                    return;
+                }
+                if matches!(notification.phase.as_str(), "checkpoint" | "rewind") {
+                    self.add_info_message(
+                        format!(
+                            "Xenolith · {}: {}",
+                            notification.phase, notification.details
+                        ),
+                        None,
+                    );
+                }
+                self.set_status(
+                    format!("Xenolith · {}", notification.phase),
+                    Some(notification.details),
+                    StatusDetailsCapitalization::Preserve,
+                    STATUS_DETAILS_DEFAULT_MAX_LINES,
+                );
+                self.request_redraw();
+            }
             ServerNotification::McpServerOauthLoginCompleted(notification) => {
                 if notification.success {
                     self.add_info_message(

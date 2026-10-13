@@ -6753,6 +6753,13 @@
             "responses"
           ],
           "type": "string"
+        },
+        {
+          "description": "Local Xenolith wire v1 over a Unix socket, without an HTTP bridge.",
+          "enum": [
+            "xenolith"
+          ],
+          "type": "string"
         }
       ]
     },

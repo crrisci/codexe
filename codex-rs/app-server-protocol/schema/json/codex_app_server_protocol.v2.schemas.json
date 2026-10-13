@@ -17424,6 +17424,26 @@
           "properties": {
             "method": {
               "enum": [
+                "xenolith/inference"
+              ],
+              "title": "Xenolith/inferenceNotificationMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/XenolithInferenceNotification"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "title": "Xenolith/inferenceNotification",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
                 "turn/moderationMetadata"
               ],
               "title": "Turn/moderationMetadataNotificationMethod",
@@ -24485,6 +24505,31 @@
         "okOverridden"
       ],
       "type": "string"
+    },
+    "XenolithInferenceNotification": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "details": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "details",
+        "phase",
+        "threadId",
+        "turnId"
+      ],
+      "title": "XenolithInferenceNotification",
+      "type": "object"
     }
   },
   "title": "CodexAppServerProtocolV2",

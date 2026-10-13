@@ -7014,6 +7014,29 @@
         "samplePaths"
       ],
       "type": "object"
+    },
+    "XenolithInferenceNotification": {
+      "properties": {
+        "details": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "turnId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "details",
+        "phase",
+        "threadId",
+        "turnId"
+      ],
+      "type": "object"
     }
   },
   "description": "Notification sent from the server to the client.",
@@ -8263,6 +8286,26 @@
         "params"
       ],
       "title": "ModelProvider/authRecoveryCompletedNotification",
+      "type": "object"
+    },
+    {
+      "properties": {
+        "method": {
+          "enum": [
+            "xenolith/inference"
+          ],
+          "title": "Xenolith/inferenceNotificationMethod",
+          "type": "string"
+        },
+        "params": {
+          "$ref": "#/definitions/XenolithInferenceNotification"
+        }
+      },
+      "required": [
+        "method",
+        "params"
+      ],
+      "title": "Xenolith/inferenceNotification",
       "type": "object"
     },
     {
