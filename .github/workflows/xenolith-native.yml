@@ -15,6 +15,14 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Keep internal reports private
+        run: |
+          python3 - <<'PYCODE'
+          import subprocess
+          forbidden = subprocess.check_output(['git', 'ls-files', '--', 'XENOLITH-VERIFICATION.md', '.test-artifacts/'], text=True)
+          if forbidden:
+              raise SystemExit('Private paths must not be tracked: ' + forbidden)
+          PYCODE
       - name: Prepare Rust
         run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt
       - name: Native wire and backend tests
