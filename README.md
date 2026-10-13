@@ -1,97 +1,93 @@
 # Codex with native Xenolith inference
 
-This community fork adds a direct Xenolith Unix-socket provider to Codex CLI.
-The `xenolith-native` branch is based on upstream `rust-v0.162.1`.
+Use Codex CLI with a local Xenolith engine through its native wire protocol.
+This community fork preserves Codex's agent loop, tools, sandbox and approvals,
+while exposing the state of local inference and keeping durable KV sessions.
 
-- [Build, configure and run](XENOLITH.md)
-- [Verified behavior and current limits](XENOLITH-VERIFICATION.md)
-- [Modification notices](XENOLITH-MODIFICATIONS.md)
+[Setup guide](XENOLITH.md) · [Verified behavior and limits](XENOLITH-VERIFICATION.md) · [Modification notices](XENOLITH-MODIFICATIONS.md)
 
-Development source release: compile this branch to use the native provider.
-The upstream npm package and desktop download below do not include this integration.
-The fork and native changes use Apache-2.0; upstream LICENSE and NOTICE are retained.
-This fork is maintained independently of OpenAI.
+## Why native integration?
 
----
+On a local machine, inference speed and the cost of rebuilding context matter.
+The Xenolith provider communicates directly over a Unix socket and carries local
+inference information into Codex's interface. It does not require an HTTP bridge.
 
-<p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
-<p align="center">
-  <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />
-</p>
-</br>
-If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="https://developers.openai.com/codex/ide">install in your IDE.</a>
-</br>If you want the desktop app experience, run <code>codex app</code> or visit <a href="https://chatgpt.com/codex?app-landing-page=true">the Codex App page</a>.
-</br>If you are looking for the <em>cloud-based agent</em> from OpenAI, <strong>Codex Web</strong>, go to <a href="https://chatgpt.com/codex">chatgpt.com/codex</a>.</p>
+- **Live prefill progress** and measured prefill/decode speed in the TUI.
+- **Durable sessions and checkpoints**, with actual KV snapshot restoration reports.
+- **Explicit cache state:** reused context, loaded snapshot or reconstruction reason.
+- **Rewind cost before applying it**, expressed in tokens to prefill.
+- **Interrupted-turn recovery**, including pending tool results without automatically
+  repeating filesystem effects whose execution was already recorded by Codex.
 
----
+The existing upstream Responses provider remains available.
 
-## Quickstart
+## Build and run
 
-### Installing and running Codex CLI
+This is a development source distribution. Build this branch to get the Xenolith
+provider; official Codex installers and npm packages contain the upstream version.
 
-Run the following on Mac or Linux to install Codex CLI:
+The complete CLI and real-model tests were run on Linux/WSL. Build prerequisites:
+Rust **1.95.0**, a C/C++ compiler, OpenSSL development headers and a compatible
+`bwrap` for Linux sandboxed tools. Xenolith and model weights are separate.
 
-```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | sh
+```sh
+git clone --branch xenolith-native https://github.com/crrisci/codex.git codex-xenolith
+cd codex-xenolith/codex-rs
+cargo build -p codex-cli --bin codex
 ```
 
-Run the following on Windows to install Codex CLI:
+1. Start your compiled Xenolith engine with a Unix socket and persistent state/cache.
+2. Create a dedicated `CODEX_HOME` and set `XENOLITH_STATE_DIR` to a private binding directory.
+3. Configure the served model, context capacity and `wire_api = "xenolith"` in that home.
+4. Run the rebuilt `codex-rs/target/debug/codex` from your coding workspace.
 
-```shell
-powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+For example, after following the [configuration guide](XENOLITH.md#start-and-configure):
+
+```sh
+CODEX_HOME=/absolute/private/codex-home \
+XENOLITH_STATE_DIR=/absolute/private/codex-bindings \
+/absolute/codex-xenolith/codex-rs/target/debug/codex
 ```
 
-The standalone installers download from `https://releases.openai.com/codex` by default and fall back to GitHub Releases if a metadata or asset download is unavailable. To force GitHub Releases, set `CODEX_INSTALLER_USE_RELEASES_OPENAI_COM` to `false` (`0` and `no` are also accepted):
+Keep the Codex home, native bindings and Xenolith state/cache to resume conversations.
+The provider connects to an existing engine; it does not implicitly start or stop it.
 
-```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_INSTALLER_USE_RELEASES_OPENAI_COM=false sh
-```
+## What has been verified?
 
-```powershell
-$env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM='false'; irm https://chatgpt.com/codex/install.ps1 | iex
-```
+| Environment | Coverage |
+|---|---|
+| Mac and WSL, simulated wire | 25 Rust framing/backend tests |
+| Rebuilt CLI and simulated wire | Actual tool/result round trip, client resume and crash without duplicated tool effects |
+| TUI and API | Thread routing/rendering, native notification schemas and CLI exports |
+| Intel/WSL, Xenolith LNL and Gemma GGUF | Read/edit/run a program, restart client and engine with KV restored, rewind, manual compaction, missing/corrupt snapshots and crash recovery |
+| GitHub CI | Native wire/backend tests, formatting and acceptance script syntax |
 
-Codex CLI can also be installed via the following package managers:
+The real battery used `gemma-4-26B-A4B-it-qat` with context **65536**.
+Simulator and CI results do not establish real-model speed or KV persistence;
+those were checked separately on the Intel machine. See the [verification report](XENOLITH-VERIFICATION.md).
 
-```shell
-# Install using npm
-npm install -g @openai/codex
-```
+## Current limits
 
-```shell
-# Install using Homebrew
-brew install --cask codex
-```
+- Rewind uses an **offline controller**, with the Codex thread closed; an interactive picker is not implemented.
+- Model and context selection are explicit; automatic discovery in the model picker is not implemented.
+- Text, function/custom tools and one namespace level are supported. Reasoning items,
+  images/audio, hosted/deferred tools, nested namespaces and constrained JSON are rejected.
+- Maximum output is **4096 tokens**. Crash recovery conservatively rebuilds context;
+  uncommitted streamed output is not guaranteed to survive.
+- Compaction is verified manually; automatic saturation of the 65536-token context remains untested.
+- Native Windows requires WSL. Wire/backend tests passed on macOS; a full macOS CLI build remains unverified.
 
-Then simply run `codex` to get started.
+## Fork and companion bridge
 
-<details>
-<summary>You can also go to the <a href="https://github.com/openai/codex/releases/latest">latest GitHub Release</a> and download the appropriate binary for your platform.</summary>
+This branch is based on upstream **`rust-v0.162.1`**, commit
+`092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`. Native changes are concentrated in
+`codex-rs/xenolith-wire`, the provider integration and dedicated inference events.
 
-Each GitHub Release contains many executables, but in practice, you likely want one of these:
+**Xenolith Bridge**, formerly Xenocodex, is the separate HTTP adapter for clients
+that need API translation. Its current frontend speaks Responses HTTP/SSE; native
+Codex can connect directly to Xenolith through this fork. Other harness protocols
+require their own bridge frontends.
 
-- macOS
-  - Apple Silicon/arm64: `codex-aarch64-apple-darwin.tar.gz`
-  - x86_64 (older Mac hardware): `codex-x86_64-apple-darwin.tar.gz`
-- Linux
-  - x86_64: `codex-x86_64-unknown-linux-musl.tar.gz`
-  - arm64: `codex-aarch64-unknown-linux-musl.tar.gz`
-
-Each archive contains a single entry with the platform baked into the name (e.g., `codex-x86_64-unknown-linux-musl`), so you likely want to rename it to `codex` after extracting it.
-
-</details>
-
-### Using Codex with your ChatGPT plan
-
-Run `codex` and select **Sign in with ChatGPT**. We recommend signing into your ChatGPT account to use Codex as part of your Plus, Pro, Business, Edu, or Enterprise plan. [Learn more about what's included in your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-in-chatgpt).
-
-You can also use Codex with an API key, but this requires [additional setup](https://developers.openai.com/codex/auth#sign-in-with-an-api-key).
-
-## Docs
-
-- [**Codex Documentation**](https://developers.openai.com/codex)
-- [**Contributing**](./docs/contributing.md)
-- [**Installing & building**](./docs/install.md)
-- [**Open source fund**](./docs/open-source-fund.md)
-
-This repository is licensed under the [Apache-2.0 License](LICENSE).
+This fork is maintained independently of OpenAI. It retains the **Apache-2.0**
+[LICENSE](LICENSE), upstream [NOTICE](NOTICE) and [modification notices](XENOLITH-MODIFICATIONS.md).
+The [original upstream README](README-UPSTREAM.md) is retained for reference.
