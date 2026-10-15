@@ -1,4 +1,4 @@
-# Xenolith modification notices
+# CodeXe modification notices
 
 Copyright (c) 2026 Francesco Pio Crisci.
 Native integration additions and modifications are licensed under Apache-2.0.
@@ -58,3 +58,8 @@ XENOLITH-MODIFICATIONS.md, xenolith/tests/, and
 .github/workflows/xenolith-native.yml. Their additions are Apache-2.0.
 
 README-UPSTREAM.md is an unchanged copy of the baseline upstream README, retained for reference.
+
+CodeXe branding updates rename the fork and its documentation links to
+`crrisci/codexe`. The executable, configuration keys and upstream package names
+remain compatible with Codex. The name alludes to Intel Xe; the project is
+independent of OpenAI and Intel.

@@ -1,9 +1,9 @@
-# Native Xenolith provider
+# CodeXe native Xenolith provider
 
 Copyright (c) 2026 Francesco Pio Crisci. Licensed under Apache-2.0.
 
-This branch connects Codex directly to Xenolith wire protocol v1 over a Unix socket.
-No HTTP adapter is required. Codex still owns the agent loop, shell tools, approvals
+CodeXe connects directly to Xenolith wire protocol v1 over a Unix socket.
+No HTTP adapter is required. CodeXe still owns the agent loop, shell tools, approvals
 and conversation history. Xenolith owns inference, native sessions and KV snapshots.
 
 Baseline: `rust-v0.162.1`, commit `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`.
@@ -16,8 +16,8 @@ Install Rust 1.95.0, a C/C++ compiler, OpenSSL development headers and a compati
 `bwrap` for Linux sandboxed tool execution. These commands do not install Xenolith.
 
 ```sh
-git clone --branch xenolith-native https://github.com/crrisci/codex.git codex-xenolith
-cd codex-xenolith/codex-rs
+git clone --branch xenolith-native https://github.com/crrisci/codexe.git codexe
+cd codexe/codex-rs
 cargo build -p codex-cli --bin codex
 cargo build --manifest-path xenolith-wire/Cargo.toml --bin xenolith-session
 ```
@@ -42,9 +42,9 @@ For example, with a GGUF model and a configured context of 65536:
   --cache /absolute/private/engine-cache
 ```
 
-Use a new private Codex home and native binding directory. Keep these, as well as
+Use a new private CodeXe home and native binding directory. Keep these, as well as
 engine state/cache, to resume conversations and restore KV across processes.
-Do not share a native binding directory between unrelated Codex homes.
+Do not share a native binding directory between unrelated CodeXe homes.
 
 ```sh
 export CODEX_HOME=/absolute/private/codex-home
@@ -74,7 +74,7 @@ stream_max_retries = 0
 Then start the compiled CLI from your coding workspace:
 
 ```sh
-/absolute/codex-xenolith/codex-rs/target/debug/codex
+/absolute/codexe/codex-rs/target/debug/codex
 ```
 
 Use the same home, binding directory and engine state/cache when resuming. The
@@ -96,7 +96,7 @@ Snapshot persistence can require an explicit checkpoint because autosave is rate
 
 ## Offline rewind
 
-Close Codex for the thread before using this controller:
+Close CodeXe for the thread before using this controller:
 
 ```sh
 xenolith-session SOCKET STATE_DIR THREAD
