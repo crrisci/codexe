@@ -20,16 +20,31 @@ use std::time::Duration;
 
 pub struct Prompt {
     pub model: String,
+    /// Physical capacity discovered before Codex selected its compaction limit.
+    pub context_window: Option<u64>,
     pub instructions: String,
     pub items: Vec<Value>,
     pub tools: Vec<Value>,
-    pub max_tokens: u64,
+    /// None uses the served model's advertised output limit.
+    pub max_tokens: Option<u64>,
+    pub reasoning: Option<ReasoningOptions>,
+}
+
+/// Native reasoning settings. An omitted budget follows Xenolith's stored
+/// setting (or its effort-derived budget on a fresh session).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct ReasoningOptions {
+    pub effort: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget_tokens: Option<u64>,
+    pub history: String,
 }
 
 #[derive(Debug)]
 pub enum Output {
     ItemAdded(Value),
     TextDelta(String),
+    ReasoningDelta(String),
     ItemDone(Value),
     Completed {
         id: String,
@@ -65,6 +80,10 @@ struct Binding {
     marker: Option<u64>,
     epoch: u64,
     in_flight: bool,
+    /// A terminal length response can leave discarded native tool starts.
+    /// Default keeps existing v1 bindings readable without a migration.
+    #[serde(default)]
+    rebuild_required: bool,
     #[serde(default)]
     anchors: Vec<Anchor>,
 }
@@ -303,7 +322,47 @@ fn translate(prompt: &Prompt) -> io::Result<(String, Vec<Value>, Vec<Value>)> {
                 if !["user", "assistant"].contains(&role) || !pending.is_empty() {
                     return Err(invalid("invalid message/tool result order"));
                 }
-                messages.push(json!({"role":role,"text":content}));
+                // Codex stores raw reasoning in a separate item immediately
+                // before this assistant message. Xenolith stores both channels
+                // on the same assistant entry.
+                if role == "assistant"
+                    && let Some(assistant) = messages.last_mut()
+                    && assistant["role"] == "assistant"
+                    && assistant.get("reasoning").is_some()
+                    && assistant["text"] == ""
+                    && assistant.get("calls").is_none()
+                {
+                    assistant["text"] = json!(content);
+                } else {
+                    messages.push(json!({"role":role,"text":content}));
+                }
+            }
+            "reasoning" => {
+                if !pending.is_empty() {
+                    return Err(invalid("reasoning inside pending tool results"));
+                }
+                let mut reasoning = String::new();
+                if let Some(parts) = item.get("content").filter(|v| !v.is_null()) {
+                    for part in parts
+                        .as_array()
+                        .ok_or_else(|| invalid("invalid reasoning content"))?
+                    {
+                        if !matches!(string(part, "type")?, "reasoning_text" | "text") {
+                            return Err(invalid("unsupported reasoning content"));
+                        }
+                        reasoning.push_str(string(part, "text")?);
+                    }
+                }
+                // Summaries and encrypted provider payloads are not raw native
+                // reasoning. Keep the Codex item without fabricating a channel.
+                if !reasoning.is_empty() {
+                    if messages.last().is_none_or(|m| m["role"] != "assistant") {
+                        messages.push(json!({"role":"assistant","text":""}));
+                    }
+                    let assistant = messages.last_mut().expect("assistant just inserted");
+                    let previous = assistant["reasoning"].as_str().unwrap_or("");
+                    assistant["reasoning"] = json!(format!("{previous}{reasoning}"));
+                }
             }
             "function_call" | "custom_tool_call" => {
                 let custom = kind == "custom_tool_call";
@@ -467,9 +526,31 @@ pub fn run_cancellable(
         ));
     }
     emit(Output::Local(json!({"kind":"describe","report":info})))?;
-    if info.model != prompt.model || prompt.max_tokens == 0 || prompt.max_tokens > info.max_output {
+    if prompt
+        .context_window
+        .is_some_and(|expected| expected != info.context_window)
+    {
+        return Err(invalid(
+            "Xenolith context window changed since discovery; restart CodeXe to rediscover capacity before continuing",
+        ));
+    }
+    let max_tokens = prompt.max_tokens.unwrap_or(info.max_output);
+    if info.model != prompt.model || max_tokens == 0 || max_tokens > info.max_output {
         return Err(invalid("model/output limit differs from describe"));
     }
+    let reasoning = if let Some(options) = &prompt.reasoning {
+        if !info.reasoning.efforts.contains(&options.effort)
+            || !info.reasoning.history.contains(&options.history)
+            || options
+                .budget_tokens
+                .is_some_and(|budget| !info.reasoning.budget_tokens || budget > i32::MAX as u64)
+        {
+            return Err(invalid("reasoning settings differ from describe"));
+        }
+        serde_json::to_value(options)?
+    } else {
+        json!(false)
+    };
     let mut binding = if path.exists() {
         let mut record: Binding = serde_json::from_slice(&fs::read(&path)?)?;
         if record.version != 1 {
@@ -497,6 +578,7 @@ pub fn run_cancellable(
             Err(error) => return Err(error),
         };
         if !record.in_flight
+            && !record.rebuild_required
             && (opened.get("marker") != Some(&json!(record.marker))
                 || opened.get("pending")
                     != Some(&json!(
@@ -513,6 +595,11 @@ pub fn run_cancellable(
         if record.in_flight {
             emit(Output::Local(
                 json!({"kind":"rebuild","reason":"interrupted generation: reconstruct from Codex transcript; tools are not executed"}),
+            ))?;
+        }
+        if record.rebuild_required {
+            emit(Output::Local(
+                json!({"kind":"rebuild","reason":"length discarded native tool calls; reconstruct from the committed Codex transcript"}),
             ))?;
         }
         record
@@ -532,6 +619,7 @@ pub fn run_cancellable(
             marker: None,
             epoch: 0,
             in_flight: false,
+            rebuild_required: false,
             anchors: vec![],
         };
         emit(Output::Local(
@@ -539,7 +627,11 @@ pub fn run_cancellable(
         ))?;
         record
     };
+    if binding.rebuild_required && history == binding.history {
+        return Err(invalid("native request repeats a completed transcript"));
+    }
     let incremental = !binding.in_flight
+        && !binding.rebuild_required
         && binding.system == system
         && binding.tools == declarations
         && !binding.history.is_empty()
@@ -599,14 +691,20 @@ pub fn run_cancellable(
             json!({"kind":"rebuild","reason":"new_or_changed_transcript"}),
         ))?;
     }
-    wire.send_frame(&serde_json::to_vec(&json!({"op":"generate","reasoning":false,"max_tokens":prompt.max_tokens,"temperature":1,"top_p":0.95,"top_k":64,"seed":1}))?)?;
+    // Omitted sampling fields preserve the durable session's sampler state.
+    wire.send_frame(&serde_json::to_vec(
+        &json!({"op":"generate","reasoning":reasoning,"max_tokens":max_tokens}),
+    )?)?;
     wire.generation_started();
     let response_id = format!("xw_{}_{}", binding.session, binding.epoch);
     let mut output_text = String::new();
+    let mut output_reasoning = String::new();
+    let mut reasoning_done = false;
     let mut started = false;
     let mut calls: BTreeMap<u64, (String, Option<Value>)> = BTreeMap::new();
     let mut order = Vec::new();
     let message = |content: &str| json!({"type":"message","id":format!("{response_id}_message"),"role":"assistant","content":[{"type":"output_text","text":content}]});
+    let reasoning_item = |content: &str| json!({"type":"reasoning","id":format!("{response_id}_reasoning"),"summary":[],"content":[{"type":"reasoning_text","text":content}],"encrypted_content":null});
     loop {
         let event = WireEvent::parse(&wire.receive_frame()?)?;
         match event {
@@ -617,8 +715,19 @@ pub fn run_cancellable(
             }
             _ if !started => return Err(invalid("wire event precedes generation start")),
             WireEvent::TextDelta { text } => {
+                if text.is_empty() {
+                    continue;
+                }
                 if !calls.is_empty() {
                     return Err(invalid("text after native tool call unsupported"));
+                }
+                if !output_reasoning.is_empty() && !reasoning_done {
+                    // Codex has one active streamed item. Close this non-tool
+                    // item before opening visible text, preserving live output.
+                    // If generation later fails, recovery rebuilds from the
+                    // reasoning Codex actually committed; no tool is published.
+                    emit(Output::ItemDone(reasoning_item(&output_reasoning)))?;
+                    reasoning_done = true;
                 }
                 if output_text.is_empty() && !text.is_empty() {
                     emit(Output::ItemAdded(message("")))?;
@@ -629,8 +738,27 @@ pub fn run_cancellable(
                 output_text.push_str(&text);
                 emit(Output::TextDelta(text))?;
             }
-            WireEvent::ReasoningDelta { .. } => {
-                return Err(invalid("reasoning received despite reasoning:false"));
+            WireEvent::ReasoningDelta { text } => {
+                if text.is_empty() {
+                    continue;
+                }
+                if prompt.reasoning.is_none() {
+                    return Err(invalid("reasoning received despite reasoning:false"));
+                }
+                if !calls.is_empty() {
+                    return Err(invalid("reasoning after native tool call unsupported"));
+                }
+                if !output_text.is_empty() {
+                    return Err(invalid("reasoning after visible text unsupported"));
+                }
+                if output_reasoning.is_empty() && !text.is_empty() {
+                    emit(Output::ItemAdded(reasoning_item("")))?;
+                }
+                if output_reasoning.len().saturating_add(text.len()) > 8 * 1024 * 1024 {
+                    return Err(invalid("native reasoning exceeds bound"));
+                }
+                output_reasoning.push_str(&text);
+                emit(Output::ReasoningDelta(text))?;
             }
             WireEvent::ToolcallStart { id, name } => {
                 if !registry.contains_key(&name)
@@ -662,6 +790,7 @@ pub fn run_cancellable(
             }
             WireEvent::Done {
                 stop,
+                reasoning_close,
                 usage,
                 marker,
                 mut checkpoint,
@@ -674,12 +803,23 @@ pub fn run_cancellable(
                         "native generation aborted; reconciliation required",
                     ));
                 }
-                if (stop == "tool_use") != !calls.is_empty()
-                    || calls.values().any(|(_, a)| a.is_none())
+                let truncated_calls = stop == "length" && !calls.is_empty();
+                if !truncated_calls
+                    && ((stop == "tool_use") != !calls.is_empty()
+                        || calls.values().any(|(_, a)| a.is_none()))
                 {
                     return Err(invalid("incomplete native tool turn"));
                 }
+                if truncated_calls {
+                    // A start or even complete arguments do not authorize a tool
+                    // on length. Rebuild from the published transcript next time.
+                    calls.clear();
+                    order.clear();
+                }
                 let mut items = Vec::new();
+                if !output_reasoning.is_empty() {
+                    items.push(reasoning_item(&output_reasoning));
+                }
                 if !output_text.is_empty() {
                     items.push(message(&output_text));
                 }
@@ -715,7 +855,10 @@ pub fn run_cancellable(
                 binding.pending = pending;
                 // Autosave is rate-limited in Xenolith. A completed client turn
                 // explicitly checkpoints when done did not confirm a saved snapshot.
-                if stop == "stop" && !checkpoint.as_ref().is_some_and(|c| c.saved) {
+                if (stop == "stop" || stop == "length")
+                    && !truncated_calls
+                    && !checkpoint.as_ref().is_some_and(|c| c.saved)
+                {
                     checkpoint = Some(
                         match request(&mut wire, json!({"op":"checkpoint"})).and_then(|value| {
                             serde_json::from_value::<Checkpoint>(value).map_err(io::Error::from)
@@ -730,10 +873,12 @@ pub fn run_cancellable(
                     );
                 }
                 binding.in_flight = false;
+                binding.rebuild_required = truncated_calls;
                 if !incremental {
                     binding.anchors.clear();
                 }
-                if binding.pending.is_empty()
+                if !binding.rebuild_required
+                    && binding.pending.is_empty()
                     && let Some(marker) = marker
                 {
                     binding.anchors.push(Anchor {
@@ -765,10 +910,13 @@ pub fn run_cancellable(
                 // execute tools and open the session for the next inference.
                 drop(wire);
                 emit(Output::Local(
-                    json!({"kind":"done","marker":marker,"checkpoint":checkpoint,"resume":resume,"inference":inference,"usage":usage}),
+                    json!({"kind":"done","stop":stop,"reasoning_close":reasoning_close,"marker":marker,"checkpoint":checkpoint,"resume":resume,"inference":inference,"usage":usage,"rebuild_required":truncated_calls}),
                 ))?;
                 for item in items {
-                    if item["type"] != "message" {
+                    if item["type"] == "reasoning" && reasoning_done {
+                        continue;
+                    }
+                    if item["type"] != "message" && item["type"] != "reasoning" {
                         emit(Output::ItemAdded(item.clone()))?;
                     }
                     emit(Output::ItemDone(item))?;
@@ -776,7 +924,7 @@ pub fn run_cancellable(
                 emit(Output::Completed {
                     id: response_id,
                     usage,
-                    end_turn: stop == "stop",
+                    end_turn: stop != "tool_use",
                 })?;
                 return Ok(());
             }
@@ -785,105 +933,91 @@ pub fn run_cancellable(
     }
 }
 
-/// Render wire measurements without substituting zero for unavailable data.
+/// Compact user-facing progress. Full native reports remain diagnostic events.
+/// Rates use the engine's active phase time, never client arrival timing.
 pub fn presentation(value: &Value) -> (String, String) {
     let kind = value["kind"]
         .as_str()
         .or(value["event"].as_str())
         .unwrap_or("state");
-    let speed = |measurement: &Value| -> String {
+    let speed = |measurement: &Value| -> Option<String> {
         match (
             measurement["tokens"].as_u64(),
             measurement["elapsed_ms"].as_u64(),
         ) {
-            (Some(tokens), Some(ms)) if ms > 0 => {
-                format!("{:.1} tok/s", tokens as f64 * 1000.0 / ms as f64)
+            (Some(tokens), Some(ms)) if tokens > 0 && ms > 0 => {
+                Some(format!("{:.1} tok/s", tokens as f64 * 1000.0 / ms as f64))
             }
-            _ => "speed unavailable".into(),
+            _ => None,
         }
     };
-    let available = |v: &Value| {
-        if v.is_null() {
-            "unavailable".to_owned()
-        } else if let Some(s) = v.as_str() {
-            s.to_owned()
-        } else {
-            v.to_string()
+    let counts = |measurement: &Value, prefill: bool| -> String {
+        match (
+            measurement["tokens"].as_u64(),
+            measurement["total"].as_u64(),
+        ) {
+            (Some(0), Some(0)) if prefill => "Cached prompt".to_owned(),
+            (Some(tokens), Some(total)) if prefill && total > 0 && tokens <= total => {
+                let percentage = u128::from(tokens) * 100 / u128::from(total);
+                format!("{percentage}% · {tokens}/{total} tokens")
+            }
+            (Some(tokens), _) => format!("{tokens} tokens"),
+            _ => String::new(),
         }
     };
     match kind {
+        "start" => ("preparing".into(), String::new()),
         "inference_progress" => {
-            let phase = value["phase"].as_str().unwrap_or("inference").to_owned();
-            let count = value["tokens"]
-                .as_u64()
-                .map(|n| n.to_string())
-                .unwrap_or("unavailable".into());
-            let total = value["total"]
-                .as_u64()
-                .map(|n| format!("/{n}"))
-                .unwrap_or_default();
-            (
-                phase,
-                format!("{count}{total} tokens · {} (wire)", speed(value)),
-            )
+            let phase = value["phase"].as_str().unwrap_or("inference");
+            if value["state"] == "finished" && phase == "prefill" {
+                return ("preparing".into(), "Prompt ready".into());
+            }
+            let mut details = counts(value, phase == "prefill");
+            if let Some(rate) = speed(value) {
+                if !details.is_empty() {
+                    details.push_str(" · ");
+                }
+                details.push_str(&rate);
+            }
+            let phase = if value["state"] == "finished" && phase == "decode" {
+                "finalizing"
+            } else {
+                phase
+            };
+            (phase.into(), details)
         }
         "progress" => (
             "prefill".into(),
-            format!(
-                "{}/{} tokens · speed unavailable",
-                value["prefilled"], value["total"]
+            counts(
+                &json!({"tokens":value["prefilled"],"total":value["total"]}),
+                true,
             ),
         ),
-        "open" => (
-            "session".into(),
-            format!(
-                "snapshot: {} · zero prefill: {} · {} tokens",
-                available(&value["report"]["resume"]),
-                available(&value["report"]["zero_prefill"]),
-                available(&value["report"]["tokens"])
-            ),
-        ),
-        "done" => (
-            "checkpoint".into(),
-            format!(
-                "prefill {} · decode {} (wire) · cache {} tokens · context {} tokens · snapshot saved: {} · loaded: {} · resume reason: {} · checkpoint reason: {}",
-                speed(&value["inference"]["prefill"]),
-                speed(&value["inference"]["decode"]),
-                available(&value["usage"]["cache_read"]),
-                available(&value["usage"]["total"]),
-                available(&value["checkpoint"]["saved"]),
-                available(&value["resume"]["loaded"]),
-                available(&value["resume"]["reason"]),
-                available(&value["checkpoint"]["reason"])
-            ),
-        ),
-        "rewind_cost" => (
-            "rewind".into(),
-            match value["prefill"].as_u64() {
-                Some(tokens) => format!(
-                    "marker {}: {tokens} tokens to prefill (wire cost; time unavailable)",
-                    value["marker"]
-                ),
-                None => format!("cost unavailable: {}", value["reason"]),
-            },
-        ),
-        "rebuild" => (
-            "rebuild".into(),
-            format!(
-                "KV reconstruction: {}",
-                value["reason"].as_str().unwrap_or("unavailable")
-            ),
-        ),
-        "describe" => (
-            "connected".into(),
-            format!(
-                "{} · context {} · durable KV {}",
-                value["report"]["model"],
-                value["report"]["context_window"],
-                value["report"]["kvstore"]
-            ),
-        ),
-        _ => (kind.to_owned(), value.to_string()),
+        "done" => {
+            let mut details = Vec::new();
+            if let Some(rate) = speed(&value["inference"]["decode"]) {
+                details.push(format!("decode {rate}"));
+            }
+            if let Some(rate) = speed(&value["inference"]["prefill"]) {
+                details.push(format!("prefill {rate}"));
+            }
+            if let Some(tokens) = value["usage"]["output"].as_u64() {
+                details.push(format!("{tokens} tokens"));
+            }
+            if let Some(tokens) = value["usage"]["cache_read"].as_u64().filter(|n| *n > 0) {
+                details.push(format!("{tokens} cached"));
+            }
+            // Keep the notification phase compatible; the native panel renders
+            // this as a completed inference, never as a conversation message.
+            ("checkpoint".into(), details.join(" · "))
+        }
+        // These control-plane events are useful in diagnostics, not as messages
+        // interrupting an answer. In particular an open hint is not proof of KV loading.
+        "open" => ("session".into(), String::new()),
+        "describe" => ("connected".into(), String::new()),
+        "rebuild" => ("rebuild".into(), String::new()),
+        "rewind_cost" => ("rewind".into(), String::new()),
+        _ => (kind.to_owned(), String::new()),
     }
 }
 
@@ -957,7 +1091,7 @@ pub fn rewind_control(
     let _lease = lease(&state_dir.join(format!("{thread}.lock")))?;
     let path = state_dir.join(format!("{thread}.json"));
     let mut binding: Binding = serde_json::from_slice(&fs::read(&path)?)?;
-    if binding.in_flight || !binding.pending.is_empty() {
+    if binding.in_flight || binding.rebuild_required || !binding.pending.is_empty() {
         return Err(invalid(
             "rewind requires a completed idle session without pending tools",
         ));

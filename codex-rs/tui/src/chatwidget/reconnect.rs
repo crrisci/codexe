@@ -7,6 +7,7 @@ use crate::bottom_pane::RestrictedInputMode;
 
 impl ChatWidget {
     pub(crate) fn pause_for_disconnect(&mut self) {
+        self.clear_native_inference();
         self.permission_discovery = None;
         self.invalidate_permission_discovery();
         self.cancel_startup_submission();

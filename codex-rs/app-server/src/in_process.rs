@@ -441,6 +441,10 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
         args.enable_codex_api_key_env,
     )
     .await?;
+    #[cfg(unix)]
+    {
+        args.config = Arc::new(codex_core::xenolith::configure((*args.config).clone()).await?);
+    }
     let channel_capacity = args.channel_capacity.max(1);
     let installation_id = resolve_installation_id(&args.config.codex_home).await?;
     let (client_tx, mut client_rx) = mpsc::channel::<InProcessClientMessage>(channel_capacity);

@@ -34,6 +34,7 @@ impl Drop for CancellationWatch {
 
 pub mod backend;
 pub mod protocol;
+pub mod service;
 
 pub struct WireConnection {
     reader: BufReader<UnixStream>,

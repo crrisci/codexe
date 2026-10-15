@@ -232,6 +232,30 @@ async fn load_config_normalizes_relative_cwd_override() -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn native_xenolith_is_default_without_an_explicit_provider_or_model() -> std::io::Result<()> {
+    let codex_home = tempdir()?;
+    let config = Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        ConfigOverrides::default(),
+        codex_home.abs(),
+    )
+    .await?;
+    assert_eq!(
+        config.model_provider_id,
+        codex_model_provider_info::XENOLITH_PROVIDER_ID
+    );
+    assert_eq!(config.model_provider.wire_api, WireApi::Xenolith);
+    assert!(
+        config.model.is_none(),
+        "the served model is discovered at inference startup"
+    );
+    assert!(config.model_provider.base_url.is_none());
+    assert!(!config.model_provider.requires_openai_auth);
+    Ok(())
+}
+
 #[tokio::test]
 async fn load_config_applies_optional_mcp_startup_grace() -> std::io::Result<()> {
     let codex_home = tempdir()?;

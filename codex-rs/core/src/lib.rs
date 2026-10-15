@@ -19,7 +19,7 @@ mod realtime_history;
 mod realtime_prompt;
 mod responses_headers;
 #[cfg(unix)]
-mod xenolith;
+pub mod xenolith;
 pub use responses_headers::CodexResponsesHeaders;
 mod responses_metadata;
 mod responses_retry;

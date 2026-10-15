@@ -74,6 +74,9 @@ pub use crate::remote::RemoteAppServerEndpoint;
 /// module exists so clients can remove a direct `codex-core` dependency
 /// while legacy startup/config paths are migrated to RPCs.
 pub mod legacy_core {
+    #[cfg(unix)]
+    pub use codex_core::xenolith;
+
     pub mod config {
         pub use codex_core::config::*;
 

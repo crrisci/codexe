@@ -629,6 +629,10 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         build_config,
     )
     .await?;
+    #[cfg(unix)]
+    {
+        config = codex_core::xenolith::configure(config).await?;
+    }
     embedded_network_policy.activate(&mut config);
     let daybreak_override = cli_kv_overrides
         .iter()

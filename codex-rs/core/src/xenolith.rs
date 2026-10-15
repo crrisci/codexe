@@ -2,6 +2,10 @@
 // Licensed under Apache-2.0; upstream copyright and notices are retained.
 
 //! Small native entry point: no HTTP, SSE parser or Responses request builder.
+mod config;
+pub use codex_xenolith_wire::service::ServicePhase;
+pub use config::{configure, configure_with_status};
+
 use crate::client_common::{Prompt, ResponseEvent, ResponseStream};
 use codex_protocol::error::{CodexErrorDetails, Result};
 use codex_protocol::openai_models::{ModelInfo, ReasoningEffort};
@@ -25,12 +29,8 @@ pub(crate) fn stream(
         )
         .into());
     }
-    if effort.is_some_and(|effort| effort != ReasoningEffort::None) {
-        return Err(CodexErrorDetails::UnsupportedOperation(
-            "native reasoning is not connected yet; configure model_reasoning_effort=none".into(),
-        )
-        .into());
-    }
+    let generation = config::GenerationSettings::from_env(effort.as_ref())
+        .map_err(|error| CodexErrorDetails::InvalidRequest(error.to_string()))?;
     let socket = base_url
         .and_then(|url| url.strip_prefix("unix://"))
         .filter(|path| path.starts_with('/'))
@@ -40,14 +40,22 @@ pub(crate) fn stream(
             )
         })?;
     let socket = PathBuf::from(socket);
-    let state_dir = std::env::var_os("XENOLITH_STATE_DIR")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .ok_or_else(|| {
-            CodexErrorDetails::InvalidRequest(
-                "set XENOLITH_STATE_DIR to an isolated absolute directory".into(),
-            )
-        })?;
+    let state_dir = match std::env::var_os("XENOLITH_STATE_DIR") {
+        Some(path) => {
+            let path = PathBuf::from(path);
+            if !path.is_absolute() {
+                return Err(CodexErrorDetails::InvalidRequest(
+                    "XENOLITH_STATE_DIR must be an absolute directory".into(),
+                )
+                .into());
+            }
+            path
+        }
+        None => crate::config::find_codex_home()
+            .map_err(|error| CodexErrorDetails::InvalidRequest(error.to_string()))?
+            .join("xenolith/bindings")
+            .to_path_buf(),
+    };
     let input = backend::Prompt {
         model: model.slug.clone(),
         instructions: prompt.base_instructions.text.clone(),
@@ -61,7 +69,9 @@ pub(crate) fn stream(
             .iter()
             .map(serde_json::to_value)
             .collect::<std::result::Result<_, _>>()?,
-        max_tokens: 4096,
+        max_tokens: generation.max_tokens,
+        context_window: model.max_context_window.map(|value| value as u64),
+        reasoning: generation.reasoning,
     };
     let (tx, rx_event) = mpsc::channel(128);
     let consumer_dropped = CancellationToken::new();
@@ -78,8 +88,13 @@ pub(crate) fn stream(
         }
     });
     tokio::task::spawn_blocking(move || {
-        let result =
-            backend::run_cancellable(&socket, &state_dir, &thread, input, cancelled, |output| {
+        let result = backend::run_cancellable(
+            &socket,
+            &state_dir,
+            &thread,
+            input,
+            cancelled,
+            |output| {
                 if cancel.is_cancelled() {
                     return Err(io::Error::new(
                         io::ErrorKind::Interrupted,
@@ -88,6 +103,7 @@ pub(crate) fn stream(
                 }
                 let event = match output {
                     Output::Local(value) => {
+                        tracing::debug!(target: "codex_core::xenolith", event = %value, "Native inference telemetry");
                         tx.blocking_send(Ok(ResponseEvent::XenolithInference(value)))
                             .map_err(|_| {
                                 io::Error::new(
@@ -104,6 +120,10 @@ pub(crate) fn stream(
                         ResponseEvent::OutputItemDone(serde_json::from_value(value)?)
                     }
                     Output::TextDelta(text) => ResponseEvent::OutputTextDelta(text),
+                    Output::ReasoningDelta(delta) => ResponseEvent::ReasoningContentDelta {
+                        delta,
+                        content_index: 0,
+                    },
                     Output::Completed {
                         id,
                         usage,
@@ -126,7 +146,8 @@ pub(crate) fn stream(
                 tx.blocking_send(Ok(event)).map_err(|_| {
                     io::Error::new(io::ErrorKind::BrokenPipe, "native consumer disconnected")
                 })
-            });
+            },
+        );
         watch_finished.cancel();
         if let Err(error) = result {
             // Native mutations must not use Codex's automatic HTTP retries.

@@ -378,6 +378,7 @@ mod settings;
 mod settings_popups;
 mod side;
 use self::safety_buffering::SafetyBufferingState;
+mod native_inference;
 mod status_state;
 mod windows_sandbox_prompts;
 use self::status_state::StatusIndicatorState;

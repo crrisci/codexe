@@ -2195,6 +2195,35 @@ async fn load_config_or_exit(
     .await
 }
 
+async fn load_config_or_exit_with_native_status(
+    cli_kv_overrides: Vec<(String, toml::Value)>,
+    overrides: ConfigOverrides,
+    loader_overrides: LoaderOverrides,
+    cloud_config_bundle: CloudConfigBundleLoader,
+    strict_config: bool,
+    native_status: tokio::sync::mpsc::UnboundedSender<startup_draft::NativeStartupPhase>,
+) -> Config {
+    match load_config_with_worktree_source_policy_and_native_status(
+        cli_kv_overrides,
+        overrides,
+        loader_overrides,
+        cloud_config_bundle,
+        strict_config,
+        None,
+        None,
+        Some(native_status),
+    )
+    .await
+    {
+        Ok(config) => config,
+        Err(err) => {
+            restore_terminal_before_fatal_exit();
+            eprintln!("Error loading configuration: {err}");
+            std::process::exit(1);
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn load_config_or_exit_with_fallback_cwd(
     cli_kv_overrides: Vec<(String, toml::Value)>,
@@ -2239,6 +2268,30 @@ async fn load_config_with_worktree_source_policy(
     fallback_cwd: Option<PathBuf>,
     worktree: Option<&ManagedTuiWorktree>,
 ) -> std::io::Result<Config> {
+    load_config_with_worktree_source_policy_and_native_status(
+        cli_kv_overrides,
+        overrides,
+        loader_overrides,
+        cloud_config_bundle,
+        strict_config,
+        fallback_cwd,
+        worktree,
+        None,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn load_config_with_worktree_source_policy_and_native_status(
+    cli_kv_overrides: Vec<(String, toml::Value)>,
+    overrides: ConfigOverrides,
+    loader_overrides: LoaderOverrides,
+    cloud_config_bundle: CloudConfigBundleLoader,
+    strict_config: bool,
+    fallback_cwd: Option<PathBuf>,
+    worktree: Option<&ManagedTuiWorktree>,
+    native_status: Option<tokio::sync::mpsc::UnboundedSender<startup_draft::NativeStartupPhase>>,
+) -> std::io::Result<Config> {
     let config = ConfigBuilder::default()
         .cli_overrides(cli_kv_overrides.clone())
         .harness_overrides(overrides.clone())
@@ -2260,6 +2313,24 @@ async fn load_config_with_worktree_source_policy(
             )
             .await?;
     }
+    #[cfg(unix)]
+    let config = if let Some(sender) = native_status {
+        crate::legacy_core::xenolith::configure_with_status(config, move |phase| {
+            use crate::legacy_core::xenolith::ServicePhase;
+            let phase = match phase {
+                ServicePhase::Connecting => startup_draft::NativeStartupPhase::Connecting,
+                ServicePhase::Starting => startup_draft::NativeStartupPhase::Starting,
+                ServicePhase::Waiting => startup_draft::NativeStartupPhase::Waiting,
+                ServicePhase::Ready => startup_draft::NativeStartupPhase::Ready,
+            };
+            let _ = sender.send(phase);
+        })
+        .await?
+    } else {
+        crate::legacy_core::xenolith::configure(config).await?
+    };
+    #[cfg(not(unix))]
+    let _ = native_status;
     Ok(config)
 }
 
