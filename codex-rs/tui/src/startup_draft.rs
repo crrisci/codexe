@@ -46,6 +46,25 @@ use crate::version::CODEX_CLI_VERSION;
 const STARTUP_EVENT_BATCH_SIZE: usize = 64;
 const STARTUP_PASTE_NEWLINE_TIMEOUT: Duration = Duration::from_millis(120);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NativeStartupPhase {
+    Connecting,
+    Starting,
+    Waiting,
+    Ready,
+}
+
+impl NativeStartupPhase {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Connecting => "Connecting to Xenolith",
+            Self::Starting => "Starting Xenolith",
+            Self::Waiting => "Waiting for Xenolith",
+            Self::Ready => "Xenolith ready",
+        }
+    }
+}
+
 #[path = "startup_draft_layout.rs"]
 mod layout;
 
@@ -109,6 +128,9 @@ pub(crate) struct StartupDraftPump {
     bottom_pane: BottomPane,
     events: Pin<Box<dyn Stream<Item = TuiEvent> + Send>>,
     app_event_rx: UnboundedReceiver<AppEvent>,
+    native_startup_tx: tokio::sync::mpsc::UnboundedSender<NativeStartupPhase>,
+    native_startup_rx: UnboundedReceiver<NativeStartupPhase>,
+    native_startup: Option<(NativeStartupPhase, Instant)>,
     initial_screen: StartupDraftInitialScreen,
     session_action: StartupDraftSessionAction,
     resolved_selection: Option<SessionSelection>,
@@ -168,6 +190,12 @@ impl StartupDraft {
         self.pump.run_until(&mut self.tui, future).await
     }
 
+    pub(crate) fn native_startup_sender(
+        &self,
+    ) -> tokio::sync::mpsc::UnboundedSender<NativeStartupPhase> {
+        self.pump.native_startup_tx.clone()
+    }
+
     /// Capture queued draft edits before lending the terminal to another input owner.
     pub(crate) async fn flush_pending_events(&mut self) -> io::Result<()> {
         self.pump.flush_pending_events(&mut self.tui).await
@@ -197,6 +225,7 @@ impl StartupDraftPump {
         session_action: StartupDraftSessionAction,
     ) -> Self {
         let (app_event_tx, app_event_rx) = unbounded_channel();
+        let (native_startup_tx, native_startup_rx) = unbounded_channel();
         let mut blossom = crate::empty_state_animation::EmptyStateAnimation::default();
         if matches!(
             session_action,
@@ -216,6 +245,9 @@ impl StartupDraftPump {
             ),
             events: tui.event_stream(),
             app_event_rx,
+            native_startup_tx,
+            native_startup_rx,
+            native_startup: None,
             initial_screen,
             session_action,
             pending_paste_newline: None,
@@ -343,9 +375,27 @@ impl StartupDraftPump {
             self.draw(tui, tui.terminal.last_known_screen_size)?;
         }
         tokio::pin!(future);
+        let mut native_tick = tokio::time::interval(Duration::from_millis(100));
+        native_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
-                output = &mut future => return Ok(output),
+                output = &mut future => {
+                    while self.native_startup_rx.try_recv().is_ok() {}
+                    self.clear_native_startup(tui)?;
+                    return Ok(output);
+                },
+                Some(phase) = self.native_startup_rx.recv() => {
+                    if phase == NativeStartupPhase::Ready {
+                        self.clear_native_startup(tui)?;
+                    } else {
+                        let started = self.native_startup.map_or_else(Instant::now, |(_, started)| started);
+                        self.native_startup = Some((phase, started));
+                        self.draw(tui, tui.terminal.last_known_screen_size)?;
+                    }
+                },
+                _ = native_tick.tick(), if self.native_startup.is_some() => {
+                    self.draw(tui, tui.terminal.last_known_screen_size)?;
+                },
                 event = self.events.next() => {
                     let Some(event) = event else {
                         return Err(io::Error::new(
@@ -428,6 +478,27 @@ impl StartupDraftPump {
         self.draw(tui, tui.terminal.last_known_screen_size)
     }
 
+    fn native_startup_line(&self) -> Option<String> {
+        self.native_startup.map(|(phase, started)| {
+            format!(
+                "  {}… {:.1} s",
+                phase.label(),
+                started.elapsed().as_secs_f64()
+            )
+        })
+    }
+
+    fn clear_native_startup(&mut self, tui: &mut Tui) -> io::Result<()> {
+        if self.native_startup.take().is_some() {
+            if self.initial_screen == StartupDraftInitialScreen::Composer {
+                self.draw(tui, tui.terminal.last_known_screen_size)?;
+            } else {
+                tui.terminal.clear()?;
+            }
+        }
+        Ok(())
+    }
+
     fn draw(&mut self, tui: &mut Tui, screen_size: Size) -> io::Result<()> {
         if self.bottom_pane.flush_paste_burst_if_due() {
             crate::startup_recovery::remember(self.bottom_pane.composer_recovery_snapshot());
@@ -439,10 +510,30 @@ impl StartupDraftPump {
         self.bottom_pane.pre_draw_tick();
         let owned = tui.is_owned_screen();
         let owned_layout = layout::OwnedStartupLayout::new(self);
-        let renderable = if owned {
+        let renderable = if self.initial_screen != StartupDraftInitialScreen::Composer
+            && self.native_startup.is_some()
+        {
+            // A protected onboarding/picker still owns input. Render only a
+            // transient loader, without revealing or enabling the composer.
+            let mut loading = FlexRenderable::new();
+            loading.push(0, RenderableItem::Borrowed(&self.header));
+            loading.push(
+                0,
+                RenderableItem::Owned(Box::new(
+                    self.native_startup_line().unwrap_or_default().dim(),
+                )),
+            );
+            loading.push(0, RenderableItem::Owned(Box::new("  Ctrl+C to exit".dim())));
+            RenderableItem::Owned(Box::new(loading))
+        } else if owned {
             RenderableItem::Borrowed(&owned_layout)
         } else {
-            startup_draft_renderable(&self.header, &self.bottom_pane, self.session_action)
+            startup_draft_renderable_with_native_status(
+                &self.header,
+                &self.bottom_pane,
+                self.session_action,
+                self.native_startup_line(),
+            )
         };
         let desired_height = if owned {
             screen_size.height
@@ -474,22 +565,32 @@ fn startup_session_header(cwd: Option<&Path>) -> Box<dyn HistoryCell> {
     ))
 }
 
+#[cfg(test)]
 fn startup_draft_renderable<'a>(
     header: &'a dyn Renderable,
     bottom_pane: &'a BottomPane,
     session_action: StartupDraftSessionAction,
 ) -> RenderableItem<'a> {
+    startup_draft_renderable_with_native_status(header, bottom_pane, session_action, None)
+}
+
+fn startup_draft_renderable_with_native_status<'a>(
+    header: &'a dyn Renderable,
+    bottom_pane: &'a BottomPane,
+    session_action: StartupDraftSessionAction,
+    native_status: Option<String>,
+) -> RenderableItem<'a> {
     let mut renderable = FlexRenderable::new();
     renderable.push(/*flex*/ 1, RenderableItem::Borrowed(header));
-    let loading_message = match session_action {
+    let loading_message = native_status.or_else(|| match session_action {
         StartupDraftSessionAction::New | StartupDraftSessionAction::NewFromCommandCenter => None,
-        StartupDraftSessionAction::Resume => Some("  Resuming session…"),
-        StartupDraftSessionAction::Fork => Some("  Forking session…"),
-    };
-    if let Some(loading_message) = loading_message {
+        StartupDraftSessionAction::Resume => Some("  Resuming session…".to_owned()),
+        StartupDraftSessionAction::Fork => Some("  Forking session…".to_owned()),
+    });
+    if let Some(loading_message) = &loading_message {
         renderable.push(
             /*flex*/ 0,
-            RenderableItem::Owned(Box::new(loading_message.dim())),
+            RenderableItem::Owned(Box::new(loading_message.clone().dim())),
         );
     }
     renderable.push(

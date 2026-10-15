@@ -458,7 +458,7 @@ fn telemetry_and_shell_results_keep_missing_data_and_literal_stdout_distinct() {
     let (_, s) = presentation(
         &json!({"event":"inference_progress","phase":"prefill","tokens":0,"total":10,"elapsed_ms":0}),
     );
-    assert!(s.contains("speed unavailable"));
+    assert_eq!(s, "0% · 0/10 tokens");
     let (_, s) = presentation(
         &json!({"event":"inference_progress","phase":"decode","tokens":20,"elapsed_ms":1000}),
     );
@@ -472,6 +472,57 @@ fn telemetry_and_shell_results_keep_missing_data_and_literal_stdout_distinct() {
     assert_eq!(projected["stdout"], literal);
     assert_eq!(projected["execution"]["exit_code"], 0);
     assert_eq!(shell_result("other_tool", &envelope), envelope);
+}
+
+#[test]
+fn native_progress_separates_phase_completion_from_request_completion() {
+    use codex_xenolith_wire::backend::presentation;
+    let running = json!({"event":"inference_progress","phase":"prefill","state":"running","tokens":42,"total":100,"elapsed_ms":500});
+    assert_eq!(
+        presentation(&running),
+        ("prefill".into(), "42% · 42/100 tokens · 84.0 tok/s".into())
+    );
+    let finished = json!({"event":"inference_progress","phase":"prefill","state":"finished","tokens":100,"total":100,"elapsed_ms":1000});
+    assert_eq!(
+        presentation(&finished),
+        ("preparing".into(), "Prompt ready".into())
+    );
+    let decode = json!({"event":"inference_progress","phase":"decode","state":"finished","tokens":20,"elapsed_ms":1000});
+    assert_eq!(
+        presentation(&decode),
+        ("finalizing".into(), "20 tokens · 20.0 tok/s".into())
+    );
+}
+
+#[test]
+fn native_progress_omits_unknown_rates_and_checkpoint_diagnostics() {
+    use codex_xenolith_wire::backend::presentation;
+    let cached = json!({"event":"inference_progress","phase":"prefill","state":"running","tokens":0,"total":0,"elapsed_ms":0});
+    assert_eq!(
+        presentation(&cached),
+        ("prefill".into(), "Cached prompt".into())
+    );
+    let legacy = json!({"event":"progress","prefilled":3,"total":10});
+    assert_eq!(
+        presentation(&legacy),
+        ("prefill".into(), "30% · 3/10 tokens".into())
+    );
+    let done = json!({"kind":"done","inference":{"prefill":{"tokens":100,"elapsed_ms":1000},"decode":{"tokens":20,"elapsed_ms":2000}},"usage":{"output":20,"cache_read":30},"checkpoint":{"saved":false,"reason":"PRIVATE_DIAGNOSTIC"},"resume":null});
+    assert_eq!(
+        presentation(&done),
+        (
+            "checkpoint".into(),
+            "decode 10.0 tok/s · prefill 100.0 tok/s · 20 tokens · 30 cached".into()
+        )
+    );
+    assert_eq!(
+        presentation(&json!({"kind":"done"})),
+        ("checkpoint".into(), String::new())
+    );
+    assert_eq!(
+        presentation(&json!({"kind":"rewind_cost","reason":"PRIVATE_DIAGNOSTIC"})),
+        ("rewind".into(), String::new())
+    );
 }
 
 #[test]

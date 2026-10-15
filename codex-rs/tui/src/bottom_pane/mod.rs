@@ -79,6 +79,7 @@ mod empty_state_policy;
 mod hook_status;
 mod mcp_server_elicitation;
 mod multi_select_picker;
+mod native_inference;
 pub(crate) use multi_select_picker::MultiSelectItem;
 pub(crate) use multi_select_picker::MultiSelectPicker;
 #[cfg(test)]
@@ -311,6 +312,8 @@ pub(crate) struct BottomPane {
     status: Option<StatusIndicatorWidget>,
     /// Running-hook summary supplied by the lifecycle owner after its reveal delay.
     hook_status_message: Option<String>,
+    /// Wire measurements are independent of the ordinary status indicator.
+    native_inference: Option<native_inference::NativeInference>,
     inline_banner: Option<actionable_banner::InlineBanner>,
     /// Streaming may drop the row without losing its elapsed time or modal pause.
     status_timer: crate::status_indicator_widget::StatusTimer,
@@ -390,6 +393,7 @@ impl BottomPane {
             is_task_running: false,
             status: None,
             hook_status_message: None,
+            native_inference: None,
             inline_banner: None,
             status_timer: crate::status_indicator_widget::StatusTimer::default(),
             unified_exec_footer: UnifiedExecFooter::new(),
@@ -1682,6 +1686,14 @@ impl BottomPane {
         }
     }
 
+    pub(crate) fn set_native_inference(&mut self, message: Option<String>) {
+        let inference = message.map(|message| native_inference::NativeInference { message });
+        if self.native_inference != inference {
+            self.native_inference = inference;
+            self.request_redraw();
+        }
+    }
+
     /// Copy background activity and hook text into the active status row, if any.
     ///
     /// This keeps status-line inline text synchronized without forcing the
@@ -2228,6 +2240,9 @@ impl BottomPane {
             }
         } else {
             let mut flex = FlexRenderable::new();
+            if let Some(inference) = &self.native_inference {
+                flex.push(/*flex*/ 0, RenderableItem::Borrowed(inference));
+            }
             if let Some(banner) = self
                 .inline_banner
                 .as_ref()
@@ -2270,6 +2285,7 @@ impl BottomPane {
                 || !self.pending_input_preview.pending_steers.is_empty()
                 || !self.pending_input_preview.rejected_steers.is_empty();
             let has_status_or_footer = self.status_widget().is_some()
+                || self.native_inference.is_some()
                 || self.hook_status_message.is_some()
                 || !self.unified_exec_footer.is_empty();
             let has_inline_previews = has_pending_thread_approvals || has_pending_input;

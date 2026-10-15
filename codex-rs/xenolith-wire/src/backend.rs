@@ -933,105 +933,91 @@ pub fn run_cancellable(
     }
 }
 
-/// Render wire measurements without substituting zero for unavailable data.
+/// Compact user-facing progress. Full native reports remain diagnostic events.
+/// Rates use the engine's active phase time, never client arrival timing.
 pub fn presentation(value: &Value) -> (String, String) {
     let kind = value["kind"]
         .as_str()
         .or(value["event"].as_str())
         .unwrap_or("state");
-    let speed = |measurement: &Value| -> String {
+    let speed = |measurement: &Value| -> Option<String> {
         match (
             measurement["tokens"].as_u64(),
             measurement["elapsed_ms"].as_u64(),
         ) {
-            (Some(tokens), Some(ms)) if ms > 0 => {
-                format!("{:.1} tok/s", tokens as f64 * 1000.0 / ms as f64)
+            (Some(tokens), Some(ms)) if tokens > 0 && ms > 0 => {
+                Some(format!("{:.1} tok/s", tokens as f64 * 1000.0 / ms as f64))
             }
-            _ => "speed unavailable".into(),
+            _ => None,
         }
     };
-    let available = |v: &Value| {
-        if v.is_null() {
-            "unavailable".to_owned()
-        } else if let Some(s) = v.as_str() {
-            s.to_owned()
-        } else {
-            v.to_string()
+    let counts = |measurement: &Value, prefill: bool| -> String {
+        match (
+            measurement["tokens"].as_u64(),
+            measurement["total"].as_u64(),
+        ) {
+            (Some(0), Some(0)) if prefill => "Cached prompt".to_owned(),
+            (Some(tokens), Some(total)) if prefill && total > 0 && tokens <= total => {
+                let percentage = u128::from(tokens) * 100 / u128::from(total);
+                format!("{percentage}% · {tokens}/{total} tokens")
+            }
+            (Some(tokens), _) => format!("{tokens} tokens"),
+            _ => String::new(),
         }
     };
     match kind {
+        "start" => ("preparing".into(), String::new()),
         "inference_progress" => {
-            let phase = value["phase"].as_str().unwrap_or("inference").to_owned();
-            let count = value["tokens"]
-                .as_u64()
-                .map(|n| n.to_string())
-                .unwrap_or("unavailable".into());
-            let total = value["total"]
-                .as_u64()
-                .map(|n| format!("/{n}"))
-                .unwrap_or_default();
-            (
-                phase,
-                format!("{count}{total} tokens · {} (wire)", speed(value)),
-            )
+            let phase = value["phase"].as_str().unwrap_or("inference");
+            if value["state"] == "finished" && phase == "prefill" {
+                return ("preparing".into(), "Prompt ready".into());
+            }
+            let mut details = counts(value, phase == "prefill");
+            if let Some(rate) = speed(value) {
+                if !details.is_empty() {
+                    details.push_str(" · ");
+                }
+                details.push_str(&rate);
+            }
+            let phase = if value["state"] == "finished" && phase == "decode" {
+                "finalizing"
+            } else {
+                phase
+            };
+            (phase.into(), details)
         }
         "progress" => (
             "prefill".into(),
-            format!(
-                "{}/{} tokens · speed unavailable",
-                value["prefilled"], value["total"]
+            counts(
+                &json!({"tokens":value["prefilled"],"total":value["total"]}),
+                true,
             ),
         ),
-        "open" => (
-            "session".into(),
-            format!(
-                "snapshot: {} · zero prefill: {} · {} tokens",
-                available(&value["report"]["resume"]),
-                available(&value["report"]["zero_prefill"]),
-                available(&value["report"]["tokens"])
-            ),
-        ),
-        "done" => (
-            "checkpoint".into(),
-            format!(
-                "prefill {} · decode {} (wire) · cache {} tokens · context {} tokens · snapshot saved: {} · loaded: {} · resume reason: {} · checkpoint reason: {}",
-                speed(&value["inference"]["prefill"]),
-                speed(&value["inference"]["decode"]),
-                available(&value["usage"]["cache_read"]),
-                available(&value["usage"]["total"]),
-                available(&value["checkpoint"]["saved"]),
-                available(&value["resume"]["loaded"]),
-                available(&value["resume"]["reason"]),
-                available(&value["checkpoint"]["reason"])
-            ),
-        ),
-        "rewind_cost" => (
-            "rewind".into(),
-            match value["prefill"].as_u64() {
-                Some(tokens) => format!(
-                    "marker {}: {tokens} tokens to prefill (wire cost; time unavailable)",
-                    value["marker"]
-                ),
-                None => format!("cost unavailable: {}", value["reason"]),
-            },
-        ),
-        "rebuild" => (
-            "rebuild".into(),
-            format!(
-                "KV reconstruction: {}",
-                value["reason"].as_str().unwrap_or("unavailable")
-            ),
-        ),
-        "describe" => (
-            "connected".into(),
-            format!(
-                "{} · context {} · durable KV {}",
-                value["report"]["model"],
-                value["report"]["context_window"],
-                value["report"]["kvstore"]
-            ),
-        ),
-        _ => (kind.to_owned(), value.to_string()),
+        "done" => {
+            let mut details = Vec::new();
+            if let Some(rate) = speed(&value["inference"]["decode"]) {
+                details.push(format!("decode {rate}"));
+            }
+            if let Some(rate) = speed(&value["inference"]["prefill"]) {
+                details.push(format!("prefill {rate}"));
+            }
+            if let Some(tokens) = value["usage"]["output"].as_u64() {
+                details.push(format!("{tokens} tokens"));
+            }
+            if let Some(tokens) = value["usage"]["cache_read"].as_u64().filter(|n| *n > 0) {
+                details.push(format!("{tokens} cached"));
+            }
+            // Keep the notification phase compatible; the native panel renders
+            // this as a completed inference, never as a conversation message.
+            ("checkpoint".into(), details.join(" · "))
+        }
+        // These control-plane events are useful in diagnostics, not as messages
+        // interrupting an answer. In particular an open hint is not proof of KV loading.
+        "open" => ("session".into(), String::new()),
+        "describe" => ("connected".into(), String::new()),
+        "rebuild" => ("rebuild".into(), String::new()),
+        "rewind_cost" => ("rewind".into(), String::new()),
+        _ => (kind.to_owned(), String::new()),
     }
 }
 

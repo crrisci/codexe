@@ -3,7 +3,8 @@
 
 //! Small native entry point: no HTTP, SSE parser or Responses request builder.
 mod config;
-pub use config::configure;
+pub use codex_xenolith_wire::service::ServicePhase;
+pub use config::{configure, configure_with_status};
 
 use crate::client_common::{Prompt, ResponseEvent, ResponseStream};
 use codex_protocol::error::{CodexErrorDetails, Result};
@@ -87,8 +88,13 @@ pub(crate) fn stream(
         }
     });
     tokio::task::spawn_blocking(move || {
-        let result =
-            backend::run_cancellable(&socket, &state_dir, &thread, input, cancelled, |output| {
+        let result = backend::run_cancellable(
+            &socket,
+            &state_dir,
+            &thread,
+            input,
+            cancelled,
+            |output| {
                 if cancel.is_cancelled() {
                     return Err(io::Error::new(
                         io::ErrorKind::Interrupted,
@@ -97,6 +103,7 @@ pub(crate) fn stream(
                 }
                 let event = match output {
                     Output::Local(value) => {
+                        tracing::debug!(target: "codex_core::xenolith", event = %value, "Native inference telemetry");
                         tx.blocking_send(Ok(ResponseEvent::XenolithInference(value)))
                             .map_err(|_| {
                                 io::Error::new(
@@ -139,7 +146,8 @@ pub(crate) fn stream(
                 tx.blocking_send(Ok(event)).map_err(|_| {
                     io::Error::new(io::ErrorKind::BrokenPipe, "native consumer disconnected")
                 })
-            });
+            },
+        );
         watch_finished.cancel();
         if let Err(error) = result {
             // Native mutations must not use Codex's automatic HTTP retries.

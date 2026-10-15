@@ -170,10 +170,21 @@ the engine commits the full generation. Recovery reconciles that partial history
 by rebuilding; executable tool items are still published only after validated
 completion and a durable binding write.
 
-TUI status displays actual wire prefill progress, prefill/decode rates, reused cache
-and snapshot/reconstruction reports. Missing measurements stay unavailable. Actual
-`loaded: true` confirms restoration; an opening zero-prefill hint alone does not.
-Snapshot persistence can require an explicit checkpoint because autosave is rate-limited.
+The TUI keeps native progress in a dedicated area above the composer, separate
+from conversation text and reasoning. Startup shows connection/loading phases
+and elapsed time, without inventing a model-loading percentage. During inference,
+the area shows prefill completion, output tokens and measured throughput. Decode
+completion changes the phase to finalization while the engine finishes and
+persists its work. A successful response leaves a compact performance summary;
+cancelled or failed work clears its active progress.
+
+Rates use engine-reported tokens and active phase time. Missing measurements are
+omitted rather than shown as zero or diagnostic placeholders. Checkpoint and
+rewind reports never insert messages into the conversation. Full native reports
+remain available through `codex_core::xenolith` debug logging. Only actual
+`loaded: true` confirms snapshot restoration; an opening zero-prefill hint alone
+does not. Snapshot persistence can require an explicit checkpoint because
+autosave is rate-limited.
 
 ## Offline rewind
 

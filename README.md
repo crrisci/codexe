@@ -13,12 +13,13 @@ On a local machine, inference speed and the cost of rebuilding context matter.
 The Xenolith provider communicates directly over a Unix socket and carries local
 inference information into CodeXe's interface. It does not require an HTTP bridge.
 
-- **Live prefill progress** and measured prefill/decode speed in the TUI.
+- **Dedicated inference status** for engine startup, live prefill progress and
+  measured generation speed, separate from conversation text.
 - **Service discovery** for the served model, context, output limit and reasoning capabilities.
 - **Native reasoning**, including streamed thoughts and history across tools and resume.
 - **Optional engine startup**, sharing Xenolith's weight-owner lock with other clients.
 - **Durable sessions and checkpoints**, with actual KV snapshot restoration reports.
-- **Explicit cache state:** reused context, loaded snapshot or reconstruction reason.
+- **Cache diagnostics:** reused context, loaded snapshot or reconstruction reason.
 - **Rewind cost before applying it**, expressed in tokens to prefill.
 - **Interrupted-turn recovery**, including pending tool results without automatically
   repeating filesystem effects whose execution was already recorded by Codex.

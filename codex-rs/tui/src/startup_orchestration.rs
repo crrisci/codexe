@@ -448,13 +448,15 @@ pub(super) async fn run_main_inner(
         ..Default::default()
     };
 
+    let native_status = startup_draft.native_startup_sender();
     let mut config = startup_draft
-        .run_until(load_config_or_exit(
+        .run_until(load_config_or_exit_with_native_status(
             cli_kv_overrides.clone(),
             overrides.clone(),
             loader_overrides.clone(),
             cloud_config_bundle.clone(),
             strict_config,
+            native_status,
         ))
         .await?;
     if app_server_target.uses_embedded_network_policy() {

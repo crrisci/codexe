@@ -15,10 +15,22 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::{Duration, Instant};
 
 const BOOTSTRAP_MAX_FRAME: usize = 4 * 1024 * 1024;
 const LOG_TAIL_BYTES: u64 = 8192;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ServicePhase {
+    Connecting,
+    Starting,
+    Waiting,
+    Ready,
+}
 
 #[derive(Clone, Debug)]
 pub struct ServiceSettings {
@@ -208,8 +220,67 @@ fn unavailable(error: &io::Error) -> bool {
 /// The exact engine weight lock is handed to the child, preventing another
 /// client (including another socket or XenoPi) from allocating competing weights.
 pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
+    ensure_service_with_status(settings, |_| {})
+}
+
+/// Startup phases describe observed lifecycle transitions, never load percentages.
+pub fn ensure_service_with_status(
+    settings: &ServiceSettings,
+    on_status: impl FnMut(ServicePhase),
+) -> io::Result<Describe> {
+    ensure_service_cancellable(settings, Arc::new(AtomicBool::new(false)), on_status)
+}
+
+fn startup_cancelled() -> io::Error {
+    io::Error::new(io::ErrorKind::Interrupted, "Xenolith startup cancelled")
+}
+
+/// Cancellation closes only this discovery connection, without sending a native
+/// cancel operation to a service that may belong to another client.
+fn discover_cancellable(
+    wire: &mut WireConnection,
+    cancelled: &Arc<AtomicBool>,
+) -> io::Result<Describe> {
+    let socket = wire.reader.get_ref().try_clone()?;
+    let finished = Arc::new(AtomicBool::new(false));
+    let stop = finished.clone();
+    let signal = cancelled.clone();
+    let watcher = std::thread::spawn(move || {
+        while !stop.load(Ordering::Acquire) {
+            if signal.load(Ordering::Acquire) {
+                let _ = socket.shutdown(std::net::Shutdown::Both);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    });
+    let result = Describe::discover(wire);
+    finished.store(true, Ordering::Release);
+    let _ = watcher.join();
+    if result.is_err() && cancelled.load(Ordering::Acquire) {
+        return Err(startup_cancelled());
+    }
+    result
+}
+
+/// An interrupted startup reaps only its own not-yet-ready child. A service that
+/// has completed describe retains its detached lifetime, including on cancellation.
+pub fn ensure_service_cancellable(
+    settings: &ServiceSettings,
+    cancelled: Arc<AtomicBool>,
+    mut on_status: impl FnMut(ServicePhase),
+) -> io::Result<Describe> {
+    if cancelled.load(Ordering::Acquire) {
+        return Err(startup_cancelled());
+    }
+    on_status(ServicePhase::Connecting);
     match connect(settings, settings.request_timeout) {
-        Ok(mut wire) => return Describe::discover(&mut wire).map_err(|e| diagnostic(settings, e)),
+        Ok(mut wire) => {
+            let info =
+                discover_cancellable(&mut wire, &cancelled).map_err(|e| diagnostic(settings, e))?;
+            on_status(ServicePhase::Ready);
+            return Ok(info);
+        }
         Err(error) if unavailable(&error) => {
             if !settings.spawn {
                 return Err(diagnostic(
@@ -244,8 +315,13 @@ pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
     let deadline = Instant::now() + settings.startup_timeout;
     let log_path = settings.engine_state_dir.join("service.log");
     let mut child: Option<Child> = None;
+    let mut waiting_reported = false;
     let last_error;
     loop {
+        if cancelled.load(Ordering::Acquire) {
+            last_error = startup_cancelled();
+            break;
+        }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             last_error = io::Error::new(
@@ -255,7 +331,7 @@ pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
             break;
         }
         match connect(settings, settings.request_timeout.min(remaining)) {
-            Ok(mut wire) => match Describe::discover(&mut wire) {
+            Ok(mut wire) => match discover_cancellable(&mut wire, &cancelled) {
                 Ok(info) => {
                     if let Some(mut owned) = child.take() {
                         // Drop never kills the detached service; reap it if this
@@ -264,6 +340,7 @@ pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
                             let _ = owned.wait();
                         });
                     }
+                    on_status(ServicePhase::Ready);
                     return Ok(info);
                 }
                 Err(error) => {
@@ -281,7 +358,10 @@ pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
             if let Some(status) = owned.try_wait()? {
                 // The engine lock may have been won by an independently
                 // launched service; one final connection is safe and read-only.
-                if let Ok(info) = describe(settings) {
+                if let Ok(mut wire) = connect(settings, settings.request_timeout.min(remaining))
+                    && let Ok(info) = discover_cancellable(&mut wire, &cancelled)
+                {
+                    on_status(ServicePhase::Ready);
                     return Ok(info);
                 }
                 last_error = io::Error::other(format!("spawned xenolith exited with {status}"));
@@ -292,7 +372,10 @@ pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
             if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
                 // Recheck under the lock before spawning. Never unlink a socket.
                 if let Ok(mut wire) = connect(settings, settings.request_timeout.min(remaining)) {
-                    return Describe::discover(&mut wire).map_err(|e| diagnostic(settings, e));
+                    let info = discover_cancellable(&mut wire, &cancelled)
+                        .map_err(|e| diagnostic(settings, e))?;
+                    on_status(ServicePhase::Ready);
+                    return Ok(info);
                 }
                 private_directory(
                     settings
@@ -302,6 +385,10 @@ pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
                 )?;
                 private_directory(&settings.engine_state_dir)?;
                 private_directory(&settings.engine_cache_dir)?;
+                if cancelled.load(Ordering::Acquire) {
+                    last_error = startup_cancelled();
+                    break;
+                }
                 child = Some(
                     spawn_service(settings, model, &lock, &log_path).map_err(|e| {
                         diagnostic(
@@ -313,12 +400,17 @@ pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
                         )
                     })?,
                 );
+                on_status(ServicePhase::Starting);
                 // The child now holds this same open file description. Keeping
                 // the parent's copy until readiness also covers early startup.
             } else {
                 let error = io::Error::last_os_error();
                 if error.kind() != io::ErrorKind::WouldBlock {
                     return Err(diagnostic(settings, error));
+                }
+                if !waiting_reported {
+                    on_status(ServicePhase::Waiting);
+                    waiting_reported = true;
                 }
             }
         }
@@ -330,6 +422,9 @@ pub fn ensure_service(settings: &ServiceSettings) -> io::Result<Describe> {
         // discovered at a socket or a PID read from an engine lock record.
         let _ = owned.kill();
         let _ = owned.wait();
+    }
+    if last_error.kind() == io::ErrorKind::Interrupted {
+        return Err(diagnostic(settings, last_error));
     }
     let details = if owned_startup {
         format!(
@@ -670,13 +765,169 @@ while True:
     }
 
     #[test]
+    fn startup_phases_follow_real_child_and_validated_readiness() {
+        let fixture = Fixture::new("ready");
+        let mut phases = Vec::new();
+        ensure_service_with_status(&fixture.settings, |phase| phases.push(phase)).unwrap();
+        assert_eq!(
+            phases,
+            [
+                ServicePhase::Connecting,
+                ServicePhase::Starting,
+                ServicePhase::Ready
+            ]
+        );
+        phases.clear();
+        ensure_service_with_status(&fixture.settings, |phase| phases.push(phase)).unwrap();
+        assert_eq!(phases, [ServicePhase::Connecting, ServicePhase::Ready]);
+        assert_eq!(
+            fs::read_to_string(fixture.root.join("spawns")).unwrap(),
+            "spawn\n"
+        );
+    }
+
+    #[test]
+    fn failed_startup_reports_starting_without_fabricating_ready_and_reaps_child() {
+        let mut fixture = Fixture::new("stall");
+        fixture.settings.startup_timeout = Duration::from_millis(300);
+        let mut phases = Vec::new();
+        let error =
+            ensure_service_with_status(&fixture.settings, |phase| phases.push(phase)).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert_eq!(phases, [ServicePhase::Connecting, ServicePhase::Starting]);
+        let pid: i32 = fs::read_to_string(fixture.root.join("pid"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        // SAFETY: signal zero checks only this known fixture child's existence.
+        assert_ne!(unsafe { libc::kill(pid, 0) }, 0);
+    }
+
+    #[test]
+    fn cancellation_reaps_a_pending_child_without_waiting_for_readiness_timeout() {
+        let mut fixture = Fixture::new("stall");
+        fixture.settings.startup_timeout = Duration::from_secs(120);
+        let settings = fixture.settings.clone();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let signal = cancelled.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            ensure_service_cancellable(&settings, signal, |phase| {
+                tx.send(phase).unwrap();
+            })
+        });
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+            ServicePhase::Connecting
+        );
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+            ServicePhase::Starting
+        );
+        let pid_path = fixture.root.join("pid");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let pid: i32 = loop {
+            if let Ok(text) = fs::read_to_string(&pid_path)
+                && let Ok(pid) = text.parse()
+            {
+                break pid;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "fixture must start before cancellation"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        let started = Instant::now();
+        cancelled.store(true, Ordering::Release);
+        assert_eq!(
+            worker.join().unwrap().unwrap_err().kind(),
+            io::ErrorKind::Interrupted
+        );
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(
+            rx.try_recv().is_err(),
+            "cancelled startup must not emit ready"
+        );
+        // SAFETY: signal zero checks only this known fixture child's existence.
+        assert_ne!(unsafe { libc::kill(pid, 0) }, 0);
+    }
+
+    #[test]
+    fn cancellation_interrupts_stalled_describe_without_cancelling_external_service() {
+        let mut fixture = Fixture::new("ready");
+        fixture.settings.request_timeout = Duration::from_secs(120);
+        private_directory(fixture.settings.socket.parent().unwrap()).unwrap();
+        let listener = UnixListener::bind(&fixture.settings.socket).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (peer, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(peer);
+            let mut frame = String::new();
+            reader.read_line(&mut frame).unwrap();
+            assert_eq!(frame, "{\"op\":\"describe\"}\n");
+            tx.send(()).unwrap();
+            frame.clear();
+            assert_eq!(
+                reader.read_line(&mut frame).unwrap(),
+                0,
+                "discovery cancellation closes this socket without a wire cancel request"
+            );
+            let (mut peer, _) = listener.accept().unwrap();
+            BufReader::new(peer.try_clone().unwrap())
+                .read_line(&mut frame)
+                .unwrap();
+            assert_eq!(frame, "{\"op\":\"describe\"}\n");
+            writeln!(peer, "{INFO}").unwrap();
+        });
+        let settings = fixture.settings.clone();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let signal = cancelled.clone();
+        let worker =
+            std::thread::spawn(move || ensure_service_cancellable(&settings, signal, |_| {}));
+        rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let started = Instant::now();
+        cancelled.store(true, Ordering::Release);
+        assert_eq!(
+            worker.join().unwrap().unwrap_err().kind(),
+            io::ErrorKind::Interrupted
+        );
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(describe(&fixture.settings).unwrap().model, "fixture");
+        assert!(!fixture.root.join("spawns").exists());
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn cancellation_after_ready_preserves_the_detached_service() {
+        let fixture = Fixture::new("ready");
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let signal = cancelled.clone();
+        ensure_service_cancellable(&fixture.settings, cancelled, |phase| {
+            if phase == ServicePhase::Ready {
+                signal.store(true, Ordering::Release);
+            }
+        })
+        .unwrap();
+        assert_eq!(describe(&fixture.settings).unwrap().model, "fixture");
+        assert_eq!(
+            fs::read_to_string(fixture.root.join("spawns")).unwrap(),
+            "spawn\n"
+        );
+    }
+
+    #[test]
     fn global_lock_blocks_another_socket_without_stopping_the_owner() {
         let fixture = Fixture::new("ready");
         ensure_service(&fixture.settings).unwrap();
         let mut another = fixture.settings.clone();
         another.socket = fixture.root.join("another.sock");
         another.startup_timeout = Duration::from_millis(200);
-        let message = ensure_service(&another).unwrap_err().to_string();
+        let mut phases = Vec::new();
+        let message = ensure_service_with_status(&another, |phase| phases.push(phase))
+            .unwrap_err()
+            .to_string();
+        assert_eq!(phases, [ServicePhase::Connecting, ServicePhase::Waiting]);
         assert!(message.contains("engine weight lock"), "{message}");
         assert!(message.contains("owned by another process"), "{message}");
         assert_eq!(

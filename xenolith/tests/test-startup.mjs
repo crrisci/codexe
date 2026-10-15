@@ -14,7 +14,7 @@ const binary = process.env.XENOCODEX_NATIVE_CODEX_BIN;
 assert.ok(binary && isAbsolute(binary), 'Set XENOCODEX_NATIVE_CODEX_BIN to the absolute rebuilt fork binary');
 
 const engineFixture = `#!/usr/bin/env python3
-import fcntl, json, os, socket, sys, threading, uuid
+import fcntl, json, os, socket, sys, threading, time, uuid
 args = sys.argv[1:]
 assert args[0] == 'serve'
 root = os.environ['CODEXE_STARTUP_FIXTURE_ROOT']
@@ -32,6 +32,7 @@ with open(root + '/spawns.jsonl', 'a') as out:
 with open(root + '/engine.pid', 'w') as out: out.write(str(os.getpid()))
 print('fixture engine startup diagnostic', file=sys.stderr, flush=True)
 if os.environ.get('CODEXE_STARTUP_FIXTURE_MODE') == 'exit': sys.exit(17)
+time.sleep(float(os.environ.get('CODEXE_STARTUP_FIXTURE_DELAY', '0')))
 server = socket.socket(socket.AF_UNIX)
 server.bind(path)
 server.listen(32)
@@ -251,11 +252,12 @@ test('fresh CLI finds the default xenolith executable on PATH', { timeout: 60000
   assert.equal(await contents(join(f.root, 'fixture-errors.jsonl')), '');
 });
 
-test('ordinary interactive TUI uses the native engine without a managed daemon package', { timeout: 45000 }, async t => {
+for (const cold of [false, true]) test(cold ? 'empty-home TUI shows native startup while the cold engine is not ready' : 'ordinary interactive TUI uses the native engine without a managed daemon package', { timeout: 45000 }, async t => {
   const f = await fixture(t);
   const workspace = join(f.root, 'workspace');
   // Trust is unrelated to provider selection; avoid blocking on folder consent.
-  await writeFile(join(f.env.CODEX_HOME, 'config.toml'), `[projects.${JSON.stringify(workspace)}]\ntrust_level = "trusted"\n`);
+  if (!cold) await writeFile(join(f.env.CODEX_HOME, 'config.toml'), `[projects.${JSON.stringify(workspace)}]\ntrust_level = "trusted"\n`);
+  else await assert.rejects(readFile(join(f.env.CODEX_HOME, 'config.toml')), error => error.code === 'ENOENT', 'Cold startup must begin without user config');
   const driver = String.raw`
 import errno, fcntl, json, os, pty, select, signal, struct, subprocess, sys, termios, time
 root = os.environ['CODEXE_STARTUP_FIXTURE_ROOT']
@@ -269,8 +271,12 @@ child = subprocess.Popen([sys.argv[1], '-C', root + '/workspace'], stdin=slave, 
 os.close(slave)
 output = bytearray()
 ready = False
+cold = os.environ.get('CODEXE_COLD_START_EXPECTED') == '1'
+cold_start_seen = False
 interrupts = 0
 last_interrupt = 0
+cancel_started = None
+cancellation_timed_out = False
 started = time.monotonic()
 try:
     while child.poll() is None and time.monotonic() - started < 30:
@@ -291,9 +297,15 @@ try:
         try:
             with open(root + '/requests.jsonl') as source: requests = source.read()
         except FileNotFoundError: pass
-        ready = ready or ('"describe"' in requests and b'startup-sim' in output)
+        if '"describe"' not in requests and os.path.exists(root + '/engine.pid'):
+            cold_start_seen = cold_start_seen or any(text in output for text in [b'Connecting to Xenolith', b'Starting Xenolith', b'Waiting for Xenolith'])
+        ready = ready or (cold_start_seen if cold else ('"describe"' in requests and b'startup-sim' in output))
         now = time.monotonic()
+        if cold and cancel_started is not None and now - cancel_started > 3:
+            cancellation_timed_out = True
+            break
         if ready and interrupts < 3 and now - last_interrupt > 0.5:
+            if cancel_started is None: cancel_started = now
             os.write(master, b'\x03')
             interrupts += 1
             last_interrupt = now
@@ -301,15 +313,16 @@ try:
         # Escalation targets only this fresh PTY process group, never the engine.
         os.killpg(child.pid, signal.SIGKILL)
     code = child.wait(timeout=5)
+    cancel_elapsed = None if cancel_started is None else time.monotonic() - cancel_started
 finally:
     if child.poll() is None:
         os.killpg(child.pid, signal.SIGKILL)
         child.wait(timeout=5)
     os.close(master)
     with open(root + '/tui.tty.log', 'wb') as target: target.write(output)
-print(json.dumps({'ready': ready, 'code': code, 'interrupts': interrupts, 'tail': bytes(output[-8192:]).decode('utf-8', 'replace')}))
+print(json.dumps({'ready': ready, 'cold_start_seen': cold_start_seen, 'cancellation_timed_out': cancellation_timed_out, 'cancel_elapsed': cancel_elapsed, 'code': code, 'interrupts': interrupts, 'tail': bytes(output[-8192:]).decode('utf-8', 'replace')}))
 `;
-  const env = { ...f.env, TERM: 'xterm-256color' };
+  const env = { ...f.env, TERM: 'xterm-256color', CODEXE_COLD_START_EXPECTED: cold ? '1' : '0', CODEXE_STARTUP_FIXTURE_DELAY: cold ? '60' : '0' };
   delete env.XENOLITH_STATE_DIR;
   const child = spawn('python3', ['-c', driver, binary], { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stdout = '', stderr = '';
@@ -319,14 +332,19 @@ print(json.dumps({'ready': ready, 'code': code, 'interrupts': interrupts, 'tail'
   await Promise.all([writeFile(join(f.root, 'tui-driver.stdout.json'), stdout), writeFile(join(f.root, 'tui-driver.stderr.log'), stderr)]);
   assert.equal(code, 0, stderr + stdout);
   const result = JSON.parse(stdout);
-  assert.equal(result.ready, true, 'TUI must render the discovered native model: ' + result.tail);
+  assert.equal(result.ready, true, 'TUI must render native startup/model state: ' + result.tail);
+  if (cold) {
+    assert.equal(result.cold_start_seen, true, 'Empty-home onboarding must show native startup before engine readiness: ' + result.tail);
+    assert.equal(result.cancellation_timed_out, false, 'Ctrl+C must cancel cold startup instead of waiting for engine readiness: ' + result.tail);
+    assert.ok(result.cancel_elapsed !== null && result.cancel_elapsed < 3.5, 'Cold startup must exit promptly after Ctrl+C: ' + JSON.stringify(result));
+  }
   assert.ok([0, 130, -2].includes(result.code), 'TUI must exit through the keyboard interrupt: ' + result.tail);
   for (const path of ['packages/app-server-daemon', 'packages/standalone', 'app-server-daemon/daemon.pid', 'app-server-daemon/daemon-updater.pid']) {
     await assert.rejects(readFile(join(f.env.CODEX_HOME, path)), error => error.code === 'ENOENT', 'TUI must not select a managed package or launch its daemon: ' + path);
   }
   const spawns = await records(join(f.root, 'spawns.jsonl'));
   assert.equal(spawns.length, 1);
-  assert.ok(alive(spawns[0].pid));
+  if (!cold) assert.ok(alive(spawns[0].pid));
   assert.equal(await contents(join(f.root, 'fixture-errors.jsonl')), '');
 });
 

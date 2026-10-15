@@ -13,8 +13,12 @@ use codex_protocol::openai_models::{
 };
 use codex_xenolith_wire::backend::ReasoningOptions;
 use codex_xenolith_wire::protocol::Describe;
-use codex_xenolith_wire::service::{ServiceSettings, ensure_service};
+use codex_xenolith_wire::service::{ServicePhase, ServiceSettings, ensure_service_cancellable};
 use std::io;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message.into())
@@ -121,7 +125,22 @@ impl GenerationSettings {
     }
 }
 
-pub async fn configure(mut config: Config) -> io::Result<Config> {
+pub async fn configure(config: Config) -> io::Result<Config> {
+    configure_with_status(config, |_| {}).await
+}
+
+struct CancelStartupOnDrop(Arc<AtomicBool>);
+
+impl Drop for CancelStartupOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
+pub async fn configure_with_status(
+    mut config: Config,
+    on_status: impl FnMut(ServicePhase) + Send + 'static,
+) -> io::Result<Config> {
     if config.model_provider.wire_api != WireApi::Xenolith {
         return Ok(config);
     }
@@ -135,9 +154,13 @@ pub async fn configure(mut config: Config) -> io::Result<Config> {
     let settings = ServiceSettings::from_env(config.model_provider.base_url.as_deref())?;
     let socket = settings.socket.clone();
     let requested_context = settings.context;
-    let info = tokio::task::spawn_blocking(move || ensure_service(&settings))
-        .await
-        .map_err(io::Error::other)??;
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let _cancel_on_drop = CancelStartupOnDrop(cancelled.clone());
+    let info = tokio::task::spawn_blocking(move || {
+        ensure_service_cancellable(&settings, cancelled, on_status)
+    })
+    .await
+    .map_err(io::Error::other)??;
     generation.validate(&info)?;
     if requested_context.is_some_and(|requested| requested != info.context_window) {
         config.startup_warnings.push(format!(

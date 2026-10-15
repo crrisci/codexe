@@ -53,3 +53,10 @@ opens the ordinary interactive TUI, waits for its discovered model to render,
 and exits through keyboard interrupts while checking that no managed daemon
 package or PID file was created. Relative binding overrides are rejected before
 inference.
+
+A second PTY case starts with an empty home and a delayed engine. It requires
+the startup indicator to appear before engine readiness and Ctrl-C to exit
+promptly during that wait. Focused Rust TUI tests (`cargo test -p codex-tui
+--lib xenolith`, from `codex-rs`) exercise the dedicated progress row, stale
+event filtering and lifecycle cleanup, plus actual transcript consolidation
+across native telemetry and terminal resize without duplicating the answer.

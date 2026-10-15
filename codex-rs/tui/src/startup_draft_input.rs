@@ -183,7 +183,9 @@ impl StartupDraftPump {
             }
         }
         crate::startup_recovery::remember(self.bottom_pane.composer_recovery_snapshot());
-        if self.initial_screen == StartupDraftInitialScreen::Composer {
+        if self.initial_screen == StartupDraftInitialScreen::Composer
+            || self.native_startup.is_some()
+        {
             self.draw(tui, screen_size)?;
         }
         while self.app_event_rx.try_recv().is_ok() {}

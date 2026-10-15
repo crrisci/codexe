@@ -327,51 +327,5 @@ mod question_notifications_tests;
 #[path = "tests/security_setup_tests.rs"]
 mod security_setup_tests;
 
-#[tokio::test]
-async fn xenolith_progress_routes_to_its_thread_and_keeps_checkpoint_visible() {
-    let (mut chat, mut events, _ops) = make_chatwidget_manual(None).await;
-    let thread = ThreadId::new();
-    chat.thread_id = Some(thread);
-    handle_turn_started(&mut chat, "native-turn");
-    let notification = |id: String, phase: &str, details: &str| {
-        ServerNotification::XenolithInference(
-            codex_app_server_protocol::XenolithInferenceNotification {
-                thread_id: id,
-                turn_id: "native-turn".into(),
-                phase: phase.into(),
-                details: details.into(),
-            },
-        )
-    };
-    chat.handle_server_notification(
-        notification(ThreadId::new().to_string(), "prefill", "FOREIGN_SESSION"),
-        None,
-    );
-    assert!(!render_bottom_popup(&chat, 80).contains("FOREIGN_SESSION"));
-    chat.handle_server_notification(
-        notification(
-            thread.to_string(),
-            "prefill",
-            "20/100 tokens · 40.0 tok/s (wire)",
-        ),
-        None,
-    );
-    let rendered = render_bottom_popup(&chat, 80);
-    assert!(rendered.contains("Xenolith"));
-    assert!(rendered.contains("20/100 tokens"));
-    chat.handle_server_notification(
-        notification(
-            thread.to_string(),
-            "checkpoint",
-            "cache 100 tokens · snapshot saved: true",
-        ),
-        None,
-    );
-    let history = drain_insert_history(&mut events)
-        .into_iter()
-        .flatten()
-        .map(|line| line.to_string())
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(history.contains("snapshot saved: true"));
-}
+#[path = "tests/xenolith_inference_tests.rs"]
+mod xenolith_inference_tests;

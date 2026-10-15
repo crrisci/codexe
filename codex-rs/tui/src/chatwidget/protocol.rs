@@ -48,28 +48,9 @@ impl ChatWidget {
         }
         match notification {
             ServerNotification::XenolithInference(notification) => {
-                if self
-                    .thread_id()
-                    .is_some_and(|id| id.to_string() != notification.thread_id)
-                {
-                    return;
+                if !from_replay {
+                    self.on_native_inference(notification);
                 }
-                if matches!(notification.phase.as_str(), "checkpoint" | "rewind") {
-                    self.add_info_message(
-                        format!(
-                            "Xenolith · {}: {}",
-                            notification.phase, notification.details
-                        ),
-                        None,
-                    );
-                }
-                self.set_status(
-                    format!("Xenolith · {}", notification.phase),
-                    Some(notification.details),
-                    StatusDetailsCapitalization::Preserve,
-                    STATUS_DETAILS_DEFAULT_MAX_LINES,
-                );
-                self.request_redraw();
             }
             ServerNotification::McpServerOauthLoginCompleted(notification) => {
                 if notification.success {
@@ -225,6 +206,7 @@ impl ChatWidget {
                 self.on_hook_completed(notification.run);
             }
             ServerNotification::Error(notification) => {
+                self.finish_native_inference(&notification.thread_id, &notification.turn_id, false);
                 if notification.will_retry {
                     if !from_replay {
                         self.on_stream_error(
@@ -445,6 +427,11 @@ impl ChatWidget {
         notification: TurnCompletedNotification,
         replay_kind: Option<ReplayKind>,
     ) {
+        self.finish_native_inference(
+            &notification.thread_id,
+            &notification.turn.id,
+            replay_kind.is_none() && notification.turn.status == TurnStatus::Completed,
+        );
         // User-message dedupe only suppresses the app-server echo of a prompt
         // this TUI already rendered locally. Once that turn ends, another
         // client can submit the same text and it still needs its own user cell.

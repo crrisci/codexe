@@ -1,5 +1,8 @@
 //! App-level orchestration tests for the TUI.
 
+#[path = "tests/xenolith_streaming_tests.rs"]
+mod xenolith_streaming_tests;
+
 #[path = "tests/copy_mode_tests.rs"]
 mod copy_mode_tests;
 #[path = "tests/mcp_login_tests.rs"]

@@ -91,3 +91,23 @@ The native startup follow-up registers Xenolith as the Unix default when no
 provider is selected, supplies native storage and capability defaults, and keeps
 ordinary local native TUI sessions in the invoking fork's embedded server.
 Explicit provider choices and remote/shared-server workflows remain separate.
+
+The native TUI follow-up adds a dedicated transient metrics row and truthful
+engine startup phases. Native telemetry no longer inserts conversation cells;
+raw diagnostics remain in debug logs. Additional modified integration points:
+
+- `codex-rs/tui/src/chatwidget.rs`
+- `codex-rs/tui/src/chatwidget/native_inference.rs`
+- `codex-rs/tui/src/chatwidget/status_state.rs`
+- `codex-rs/tui/src/chatwidget/turn_runtime.rs`
+- `codex-rs/tui/src/chatwidget/reconnect.rs`
+- `codex-rs/tui/src/chatwidget/session_flow.rs`
+- `codex-rs/tui/src/chatwidget/tests/xenolith_inference_tests.rs`
+- `codex-rs/tui/src/bottom_pane/mod.rs`
+- `codex-rs/tui/src/bottom_pane/native_inference.rs`
+- `codex-rs/tui/src/startup_draft.rs`
+- `codex-rs/tui/src/startup_draft_input.rs`
+- `codex-rs/tui/src/startup_draft_layout.rs`
+- `codex-rs/tui/src/startup_draft_tests.rs`
+- `codex-rs/tui/src/app/tests.rs`
+- `codex-rs/tui/src/app/tests/xenolith_streaming_tests.rs`
