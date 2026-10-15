@@ -63,3 +63,6 @@ CodeXe branding updates rename the fork and its documentation links to
 `crrisci/codexe`. The executable, configuration keys and upstream package names
 remain compatible with Codex. The name alludes to Intel Xe; the project is
 independent of OpenAI and Intel.
+
+Native reasoning and generation settings also add `codex-rs/core/src/xenolith/config.rs`.
+These additions and their regression tests retain the Apache-2.0 license.

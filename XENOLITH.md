@@ -82,6 +82,28 @@ native backend connects to an existing engine; it does not start/stop it implici
 No API key is required for this provider. Model/context discovery in the picker is
 not implemented; the example model name must match your own engine.
 
+## Reasoning and output
+
+Set `model_reasoning_effort` to a service-supported level (`low`, `medium`,
+`high`, `max`); omitted or `none` disables reasoning. Compatibility aliases
+`minimal` and `xhigh` map to `low` and `high`, respectively, as in XenoPi.
+Use `show_raw_agent_reasoning = true` to display the native reasoning channel
+in interfaces that hide raw reasoning by default. It is stored separately from
+assistant text and is not presented as a provider-generated summary.
+
+| Variable | Contract |
+|---|---|
+| `XENOLITH_MAX_OUTPUT_TOKENS` | Optional positive output limit, no greater than `describe.max_output`. Omit to use the service limit; there is no fixed 4096-token cap. |
+| `XENOLITH_REASONING_BUDGET` | Optional nonnegative signed-32-bit reasoning token budget; requires enabled reasoning and advertised budget support. Reasoning shares the output budget. |
+| `XENOLITH_REASONING_HISTORY` | `discard` (default) or `preserve_tool_calls`, validated against advertised capabilities. This controls engine context projection, not deletion from CodeXe history. |
+
+As specified by Xenolith, omitting a reasoning budget at unchanged effort retains
+the session's existing engine override; changing effort resets it. Generation
+does not reseed the sampler on every request. Output/reasoning capabilities are
+revalidated before each inference. A response ending at its output limit is
+terminal; CodeXe does not automatically retry the identical transcript. Incomplete
+tool calls are never executed, and the next changed transcript rebuilds safely.
+
 ## Sessions and local telemetry
 
 Bindings are durable, atomic and locked. The native path never uses ephemeral
@@ -129,8 +151,8 @@ it does not load a real model or execute the full upstream suite.
 
 ## Unsupported in this milestone
 
-Reasoning and historical reasoning items, media, hosted/deferred tools, nested
-namespaces and constrained JSON are rejected. Function/custom tools with one namespace
-are supported. Output is limited to 4096 tokens. Native temporary requests are not
+Media, hosted/deferred tools, nested namespaces and constrained JSON are rejected.
+Text, reasoning and function/custom tools with one namespace are supported.
+Output defaults to the service limit, with an optional lower client limit. Native temporary requests are not
 exposed. Crash recovery conservatively rebuilds KV and cannot guarantee uncommitted
 streamed output. Automatic context saturation and GGUF incompatibility remain untested.

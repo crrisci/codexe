@@ -3,7 +3,7 @@
 
 #![cfg(unix)]
 use codex_xenolith_wire::WireConnection;
-use codex_xenolith_wire::backend::{Output, Prompt, run};
+use codex_xenolith_wire::backend::{Output, Prompt, ReasoningOptions, run};
 use codex_xenolith_wire::protocol::{Describe, WireEvent};
 use serde_json::{Value, json};
 use std::fs;
@@ -32,10 +32,12 @@ fn user(text: &str) -> Value {
 fn prompt(items: Vec<Value>, tools: Vec<Value>) -> Prompt {
     Prompt {
         model: "test-model".into(),
+        context_window: None,
         instructions: "Be helpful".into(),
         items,
         tools,
-        max_tokens: 128,
+        max_tokens: Some(128),
+        reasoning: None,
     }
 }
 type Step = (&'static str, Vec<Value>);
@@ -153,9 +155,16 @@ fn text_stream_commits_binding_and_reopens_snapshot() {
             }
         })
         .unwrap();
-    let record: Value =
+    let mut record: Value =
         serde_json::from_slice(&fs::read(fake.state().join("thread-1.json")).unwrap()).unwrap();
     assert_eq!(record["in_flight"], false);
+    // v1 bindings written before rebuild_required remain readable in place.
+    record.as_object_mut().unwrap().remove("rebuild_required");
+    fs::write(
+        fake.state().join("thread-1.json"),
+        serde_json::to_vec(&record).unwrap(),
+    )
+    .unwrap();
     let (result, second) = run_capture(
         &fake,
         prompt(vec![user("hello"), message, user("continue")], vec![]),
@@ -702,4 +711,418 @@ fn completed_turn_forces_checkpoint_when_autosave_did_not_run() {
             .count(),
         1
     );
+}
+
+fn reasoning() -> ReasoningOptions {
+    ReasoningOptions {
+        effort: "high".into(),
+        budget_tokens: Some(64),
+        history: "preserve_tool_calls".into(),
+    }
+}
+
+#[test]
+fn output_default_and_reasoning_settings_follow_describe_without_reseeding() {
+    let mut fake = Fake::new(vec![initial(vec![
+        json!({"event":"start"}),
+        done("stop", 10),
+    ])]);
+    let mut input = prompt(vec![user("hello")], vec![]);
+    input.max_tokens = None;
+    input.context_window = Some(65536);
+    input.reasoning = Some(reasoning());
+    run_capture(&fake, input).0.unwrap();
+    let requests = fake.finish();
+    let generate = requests.iter().find(|r| r["op"] == "generate").unwrap();
+    assert_eq!(generate["max_tokens"], 4096);
+    assert_eq!(
+        generate["reasoning"],
+        json!({"effort":"high","budget_tokens":64,"history":"preserve_tool_calls"})
+    );
+    for key in ["seed", "temperature", "top_p", "top_k"] {
+        assert!(generate.get(key).is_none());
+    }
+}
+
+#[test]
+fn context_capacity_drift_requires_rediscovery_before_native_mutation() {
+    let mut fake = Fake::new(vec![vec![("describe", vec![describe()])]]);
+    let mut input = prompt(vec![user("hello")], vec![]);
+    input.context_window = Some(32768);
+    let (result, events) = run_capture(&fake, input);
+    let message = result.unwrap_err().to_string();
+    assert!(message.contains("context window changed since discovery"));
+    assert!(message.contains("restart CodeXe to rediscover"));
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, Output::ItemAdded(_) | Output::Completed { .. }))
+    );
+    assert!(!fake.state().join("thread-1.json").exists());
+    assert_eq!(fake.finish().len(), 1);
+}
+
+#[test]
+fn invalid_output_and_reasoning_options_fail_before_session_mutation() {
+    for case in 0..8 {
+        let mut info = describe();
+        let mut input = prompt(vec![user("hello")], vec![]);
+        input.reasoning = Some(reasoning());
+        match case {
+            0 => input.max_tokens = Some(0),
+            1 => input.max_tokens = Some(4097),
+            2 => input.reasoning.as_mut().unwrap().effort = "xhigh".into(),
+            3 => input.reasoning.as_mut().unwrap().history = "all".into(),
+            4 => input.reasoning.as_mut().unwrap().budget_tokens = Some(i32::MAX as u64 + 1),
+            5 => info["reasoning"]["efforts"] = json!(["low"]),
+            6 => info["reasoning"]["history"] = json!(["discard"]),
+            7 => info["reasoning"]["budget_tokens"] = json!(false),
+            _ => unreachable!(),
+        }
+        let mut fake = Fake::new(vec![vec![("describe", vec![info])]]);
+        assert!(run_capture(&fake, input).0.is_err(), "case {case}");
+        assert_eq!(fake.finish().len(), 1);
+    }
+}
+
+#[test]
+fn reasoning_roundtrips_through_tool_resume_and_transcript_rebuild() {
+    let tools = vec![json!({"type":"function","name":"echo","parameters":{}})];
+    let mut fake = Fake::new(vec![
+        initial(vec![
+            json!({"event":"start"}),
+            json!({"event":"reasoning_delta","text":"consider "}),
+            json!({"event":"reasoning_delta","text":"the tool"}),
+            json!({"event":"text_delta","text":"checking"}),
+            json!({"event":"toolcall_start","id":7,"name":"echo"}),
+            json!({"event":"toolcall_end","id":7,"name":"echo","arguments":{"text":"hello"}}),
+            done("tool_use", 10),
+        ]),
+        vec![
+            ("describe", vec![describe()]),
+            (
+                "open",
+                vec![json!({"ok":true,"marker":10,"pending":[7],"resume":"snapshot"})],
+            ),
+            ("append", vec![json!({"ok":true})]),
+            (
+                "generate",
+                vec![
+                    json!({"event":"start"}),
+                    json!({"event":"text_delta","text":"hello"}),
+                    done("stop", 12),
+                ],
+            ),
+        ],
+        vec![
+            ("describe", vec![describe()]),
+            ("open", vec![json!({"ok":true,"marker":12,"pending":[]})]),
+            ("rebuild", vec![json!({"ok":true})]),
+            ("generate", vec![json!({"event":"start"}), done("stop", 14)]),
+        ],
+    ]);
+    let mut first = prompt(vec![user("hello")], tools.clone());
+    first.reasoning = Some(reasoning());
+    let (result, events) = run_capture(&fake, first);
+    result.unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, Output::ReasoningDelta(text) if text == "consider "))
+    );
+    let mut items = vec![user("hello")];
+    items.extend(events.into_iter().filter_map(|e| match e {
+        Output::ItemDone(item) => Some(item),
+        _ => None,
+    }));
+    assert_eq!(items[1]["type"], "reasoning");
+    assert_eq!(items[1]["summary"], json!([]));
+    assert_eq!(
+        items[1]["content"][0],
+        json!({"type":"reasoning_text","text":"consider the tool"})
+    );
+    items.push(
+        json!({"type":"function_call_output","call_id":items[3]["call_id"],"output":"hello"}),
+    );
+    let mut second = prompt(items.clone(), tools.clone());
+    second.reasoning = Some(reasoning());
+    let (result, events) = run_capture(&fake, second);
+    result.unwrap();
+    items.extend(events.into_iter().filter_map(|e| match e {
+        Output::ItemDone(item) => Some(item),
+        _ => None,
+    }));
+    items.push(user("continue"));
+    let mut compacted = prompt(items, tools);
+    compacted.reasoning = Some(reasoning());
+    compacted.instructions = "Current compaction instructions".into();
+    run_capture(&fake, compacted).0.unwrap();
+    let requests = fake.finish();
+    let rebuilt = requests.iter().rfind(|r| r["op"] == "rebuild").unwrap();
+    assert_eq!(rebuilt["messages"][1]["role"], "assistant");
+    assert_eq!(rebuilt["messages"][1]["reasoning"], "consider the tool");
+    assert_eq!(rebuilt["messages"][1]["text"], "checking");
+    assert_eq!(rebuilt["messages"][1]["calls"][0]["name"], "echo");
+    assert_eq!(rebuilt["messages"][2]["role"], "tool");
+    assert_eq!(requests.iter().filter(|r| r["op"] == "append").count(), 1);
+}
+
+#[test]
+fn length_closes_partial_reasoning_without_automatic_followup() {
+    let mut terminal = done("length", 10);
+    terminal["reasoning_close"] = json!("length");
+    let mut fake = Fake::new(vec![
+        initial(vec![
+            json!({"event":"start"}),
+            json!({"event":"reasoning_delta","text":"partial thought"}),
+            terminal,
+        ]),
+        vec![
+            ("describe", vec![describe()]),
+            ("open", vec![json!({"ok":true,"marker":10,"pending":[]})]),
+        ],
+    ]);
+    let mut input = prompt(vec![user("hello")], vec![]);
+    input.reasoning = Some(reasoning());
+    let (result, events) = run_capture(&fake, input);
+    result.unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, Output::Completed { end_turn: true, .. }))
+    );
+    let item = events
+        .into_iter()
+        .find_map(|e| match e {
+            Output::ItemDone(item) => Some(item),
+            _ => None,
+        })
+        .unwrap();
+    let mut repeated = prompt(vec![user("hello"), item], vec![]);
+    repeated.reasoning = Some(reasoning());
+    assert!(
+        run_capture(&fake, repeated)
+            .0
+            .unwrap_err()
+            .to_string()
+            .contains("repeats a completed transcript")
+    );
+    assert_eq!(
+        fake.finish()
+            .iter()
+            .filter(|r| r["op"] == "generate")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn length_never_publishes_tool_calls_and_next_user_turn_rebuilds_safely() {
+    for complete in [false, true] {
+        let mut events = vec![
+            json!({"event":"start"}),
+            json!({"event":"text_delta","text":"partial"}),
+            json!({"event":"toolcall_start","id":7,"name":"echo"}),
+        ];
+        if complete {
+            events.push(json!({"event":"toolcall_end","id":7,"name":"echo","arguments":{}}));
+        }
+        events.push(done("length", 10));
+        let mut fake = Fake::new(vec![
+            initial(events),
+            vec![
+                ("describe", vec![describe()]),
+                ("open", vec![json!({"ok":true,"marker":10,"pending":[7]})]),
+            ],
+            vec![
+                ("describe", vec![describe()]),
+                ("open", vec![json!({"ok":true,"marker":10,"pending":[7]})]),
+                ("rebuild", vec![json!({"ok":true})]),
+                ("generate", vec![json!({"event":"start"}), done("stop", 12)]),
+            ],
+        ]);
+        let tools = vec![json!({"type":"function","name":"echo","parameters":{}})];
+        let (result, events) = run_capture(&fake, prompt(vec![user("hello")], tools.clone()));
+        result.unwrap();
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, Output::Completed { end_turn: true, .. }))
+        );
+        assert!(!events.iter().any(|e| matches!(e, Output::ItemAdded(item) | Output::ItemDone(item) if item["type"] == "function_call")));
+        let assistant = events
+            .into_iter()
+            .find_map(|e| match e {
+                Output::ItemDone(item) => Some(item),
+                _ => None,
+            })
+            .unwrap();
+        let binding: Value =
+            serde_json::from_slice(&fs::read(fake.state().join("thread-1.json")).unwrap()).unwrap();
+        assert_eq!(binding["in_flight"], false);
+        assert_eq!(binding["rebuild_required"], true);
+        assert!(
+            run_capture(
+                &fake,
+                prompt(vec![user("hello"), assistant.clone()], tools.clone())
+            )
+            .0
+            .unwrap_err()
+            .to_string()
+            .contains("repeats a completed transcript")
+        );
+        run_capture(
+            &fake,
+            prompt(vec![user("hello"), assistant, user("continue")], tools),
+        )
+        .0
+        .unwrap();
+        let requests = fake.finish();
+        assert_eq!(requests.iter().filter(|r| r["op"] == "rebuild").count(), 2);
+        let rebuilt = requests.iter().rfind(|r| r["op"] == "rebuild").unwrap();
+        assert!(
+            !rebuilt["messages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|message| message.get("calls").is_some())
+        );
+    }
+}
+
+#[test]
+fn ordinary_stop_with_unfinished_tool_is_rejected_without_publication() {
+    let mut fake = Fake::new(vec![initial(vec![
+        json!({"event":"start"}),
+        json!({"event":"toolcall_start","id":7,"name":"echo"}),
+        done("stop", 10),
+    ])]);
+    let (result, events) = run_capture(
+        &fake,
+        prompt(
+            vec![user("hello")],
+            vec![json!({"type":"function","name":"echo","parameters":{}})],
+        ),
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("incomplete native tool turn")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Output::ItemDone(_) | Output::Completed { .. }))
+    );
+    fake.finish();
+}
+
+#[test]
+fn reasoning_and_text_stream_with_one_active_item_and_no_duplicate_completion() {
+    let mut fake = Fake::new(vec![initial(vec![
+        json!({"event":"start"}),
+        json!({"event":"reasoning_delta","text":"a thought"}),
+        json!({"event":"text_delta","text":"an answer"}),
+        done("stop", 10),
+    ])]);
+    let mut input = prompt(vec![user("hello")], vec![]);
+    input.reasoning = Some(reasoning());
+    let (result, events) = run_capture(&fake, input);
+    result.unwrap();
+    let mut active: Option<String> = None;
+    let mut completed = Vec::new();
+    for event in events {
+        match event {
+            Output::ItemAdded(item) => {
+                assert!(active.is_none(), "a new item replaced the active item");
+                active = Some(item["type"].as_str().unwrap().to_owned());
+            }
+            Output::ReasoningDelta(_) => assert_eq!(active.as_deref(), Some("reasoning")),
+            Output::TextDelta(_) => assert_eq!(active.as_deref(), Some("message")),
+            Output::ItemDone(item) => {
+                assert_eq!(active.take().as_deref(), item["type"].as_str());
+                completed.push(item["type"].as_str().unwrap().to_owned());
+            }
+            _ => {}
+        }
+    }
+    assert!(active.is_none());
+    assert_eq!(completed, ["reasoning", "message"]);
+    fake.finish();
+}
+
+#[test]
+fn failure_after_reasoning_transition_recovers_committed_thought_without_replaying_tools() {
+    let mut fake = Fake::new(vec![
+        initial(vec![
+            json!({"event":"start"}),
+            json!({"event":"reasoning_delta","text":"committed thought"}),
+            json!({"event":"text_delta","text":"uncommitted answer"}),
+            json!({"event":"toolcall_start","id":7,"name":"echo"}),
+            json!({"event":"toolcall_end","id":7,"name":"echo","arguments":{}}),
+            json!({"event":"error","code":"io_error","error":"failed persistence"}),
+        ]),
+        vec![
+            ("describe", vec![describe()]),
+            ("open", vec![json!({"ok":true,"marker":9,"pending":[7]})]),
+            ("rebuild", vec![json!({"ok":true})]),
+            ("generate", vec![json!({"event":"start"}), done("stop", 12)]),
+        ],
+    ]);
+    let tools = vec![json!({"type":"function","name":"echo","parameters":{}})];
+    let mut input = prompt(vec![user("hello")], tools.clone());
+    input.reasoning = Some(reasoning());
+    let (result, events) = run_capture(&fake, input);
+    assert!(result.is_err());
+    let committed = events
+        .into_iter()
+        .filter_map(|event| match event {
+            Output::ItemDone(item) => Some(item),
+            Output::Completed { .. } => panic!("failed generation completed"),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(committed.len(), 1);
+    assert_eq!(committed[0]["type"], "reasoning");
+    let record: Value =
+        serde_json::from_slice(&fs::read(fake.state().join("thread-1.json")).unwrap()).unwrap();
+    assert_eq!(record["in_flight"], true);
+    let mut input = prompt(
+        vec![user("hello"), committed[0].clone(), user("continue")],
+        tools,
+    );
+    input.reasoning = Some(reasoning());
+    run_capture(&fake, input).0.unwrap();
+    let requests = fake.finish();
+    let rebuilt = requests.iter().rfind(|r| r["op"] == "rebuild").unwrap();
+    assert_eq!(
+        rebuilt["messages"][1],
+        json!({"role":"assistant","text":"","reasoning":"committed thought"})
+    );
+    assert_eq!(rebuilt["messages"][2]["text"], "continue");
+    assert!(requests.iter().all(|r| r["op"] != "append"));
+}
+
+#[test]
+fn reasoning_after_visible_text_is_rejected_instead_of_using_message_channel() {
+    let mut fake = Fake::new(vec![initial(vec![
+        json!({"event":"start"}),
+        json!({"event":"text_delta","text":"answer"}),
+        json!({"event":"reasoning_delta","text":"late thought"}),
+    ])]);
+    let mut input = prompt(vec![user("hello")], vec![]);
+    input.reasoning = Some(reasoning());
+    let (result, events) = run_capture(&fake, input);
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("reasoning after visible text")
+    );
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        Output::ReasoningDelta(_) | Output::ItemDone(_) | Output::Completed { .. }
+    )));
+    fake.finish();
 }

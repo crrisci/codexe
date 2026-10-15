@@ -170,6 +170,7 @@ pub enum WireEvent {
     },
     Done {
         stop: String,
+        reasoning_close: Option<String>,
         usage: Usage,
         marker: Option<u64>,
         checkpoint: Option<Checkpoint>,
@@ -210,6 +211,7 @@ impl WireEvent {
             }
             Self::Done {
                 stop,
+                reasoning_close,
                 usage,
                 inference,
                 ..
@@ -222,6 +224,11 @@ impl WireEvent {
                 }
                 if !["stop", "tool_use", "length", "aborted"].contains(&stop.as_str()) {
                     return Err(invalid("unknown generation stop"));
+                }
+                if reasoning_close.as_deref().is_some_and(|close| {
+                    !["natural", "soft", "hard", "length", "aborted", "eos"].contains(&close)
+                }) {
+                    return Err(invalid("unknown reasoning close"));
                 }
                 usage.validate()?;
             }

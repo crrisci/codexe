@@ -14,6 +14,7 @@ The Xenolith provider communicates directly over a Unix socket and carries local
 inference information into CodeXe's interface. It does not require an HTTP bridge.
 
 - **Live prefill progress** and measured prefill/decode speed in the TUI.
+- **Native reasoning**, including streamed thoughts and history across tools and resume.
 - **Durable sessions and checkpoints**, with actual KV snapshot restoration reports.
 - **Explicit cache state:** reused context, loaded snapshot or reconstruction reason.
 - **Rewind cost before applying it**, expressed in tokens to prefill.
@@ -60,9 +61,11 @@ The provider connects to an existing engine; it does not implicitly start or sto
 
 - Rewind uses an **offline controller**, with the CodeXe thread closed; an interactive picker is not implemented.
 - Model and context selection are explicit; automatic discovery in the model picker is not implemented.
-- Text, function/custom tools and one namespace level are supported. Reasoning items,
-  images/audio, hosted/deferred tools, nested namespaces and constrained JSON are rejected.
-- Maximum output is **4096 tokens**. Crash recovery conservatively rebuilds context;
+- Text, reasoning, function/custom tools and one namespace level are supported.
+  Images/audio, hosted/deferred tools, nested namespaces and constrained JSON are rejected.
+- Output defaults to the service limit, with an optional lower client limit.
+  Reaching that limit terminates the response without an automatic retry.
+  Crash recovery conservatively rebuilds context;
   uncommitted streamed output is not guaranteed to survive.
 - Compaction is verified manually; automatic saturation of the 65536-token context remains untested.
 - Native Windows requires WSL. Wire/backend tests passed on macOS; a full macOS CLI build remains unverified.

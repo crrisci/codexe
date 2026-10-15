@@ -2,6 +2,8 @@
 // Licensed under Apache-2.0; upstream copyright and notices are retained.
 
 //! Small native entry point: no HTTP, SSE parser or Responses request builder.
+mod config;
+
 use crate::client_common::{Prompt, ResponseEvent, ResponseStream};
 use codex_protocol::error::{CodexErrorDetails, Result};
 use codex_protocol::openai_models::{ModelInfo, ReasoningEffort};
@@ -25,12 +27,8 @@ pub(crate) fn stream(
         )
         .into());
     }
-    if effort.is_some_and(|effort| effort != ReasoningEffort::None) {
-        return Err(CodexErrorDetails::UnsupportedOperation(
-            "native reasoning is not connected yet; configure model_reasoning_effort=none".into(),
-        )
-        .into());
-    }
+    let generation = config::GenerationSettings::from_env(effort.as_ref())
+        .map_err(|error| CodexErrorDetails::InvalidRequest(error.to_string()))?;
     let socket = base_url
         .and_then(|url| url.strip_prefix("unix://"))
         .filter(|path| path.starts_with('/'))
@@ -61,7 +59,9 @@ pub(crate) fn stream(
             .iter()
             .map(serde_json::to_value)
             .collect::<std::result::Result<_, _>>()?,
-        max_tokens: 4096,
+        max_tokens: generation.max_tokens,
+        context_window: None,
+        reasoning: generation.reasoning,
     };
     let (tx, rx_event) = mpsc::channel(128);
     let consumer_dropped = CancellationToken::new();
@@ -104,6 +104,10 @@ pub(crate) fn stream(
                         ResponseEvent::OutputItemDone(serde_json::from_value(value)?)
                     }
                     Output::TextDelta(text) => ResponseEvent::OutputTextDelta(text),
+                    Output::ReasoningDelta(delta) => ResponseEvent::ReasoningContentDelta {
+                        delta,
+                        content_index: 0,
+                    },
                     Output::Completed {
                         id,
                         usage,
