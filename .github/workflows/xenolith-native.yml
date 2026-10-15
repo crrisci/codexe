@@ -11,8 +11,14 @@ permissions:
   contents: read
 jobs:
   wire:
-    name: Native wire and backend tests
+    name: Native CLI and wire acceptance
+    timeout-minutes: 90
     runs-on: ubuntu-24.04
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Keep internal reports private
@@ -23,13 +29,28 @@ jobs:
           if forbidden:
               raise SystemExit('Private paths must not be tracked: ' + forbidden)
           PYCODE
+      - name: Install Linux build and sandbox dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libcap-dev libasound2-dev bubblewrap
+          sudo sysctl -w kernel.unprivileged_userns_clone=1
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Prepare Rust
         run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt
+      - name: Prepare Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
       - name: Native wire and backend tests
         run: cargo +1.95.0 test --manifest-path codex-rs/xenolith-wire/Cargo.toml
       - name: Check native formatting
         run: cargo +1.95.0 fmt --manifest-path codex-rs/xenolith-wire/Cargo.toml --check
       - name: Check acceptance script syntax
         run: |
-          node --check xenolith/tests/test-codex.mjs
-          node --check xenolith/tests/test-crash-tool.mjs
+          for script in xenolith/tests/*.mjs; do node --check "$script"; done
+      - name: Build the actual native CLI
+        run: cargo +1.95.0 build --manifest-path codex-rs/Cargo.toml -p codex-cli --bin codex -j 2
+      - name: Exercise native discovery, reasoning, tools and recovery through the CLI
+        env:
+          XENOCODEX_NATIVE_CODEX_BIN: ${{ github.workspace }}/codex-rs/target/debug/codex
+        run: node --test --test-concurrency=1 xenolith/tests/test-*.mjs

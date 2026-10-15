@@ -14,7 +14,7 @@ import { once } from 'node:events';
 const binary = process.env.XENOCODEX_NATIVE_CODEX_BIN;
 assert.ok(binary && isAbsolute(binary), 'Set XENOCODEX_NATIVE_CODEX_BIN to the absolute rebuilt fork binary');
 
-test('native Codex executes a tool, appends its result and reopens a persistent binding', { timeout: 120000 }, async t => {
+for (const compact of [false, true]) test(`discovered native model streams reasoning, executes a tool and resumes ${compact ? 'compacted' : 'persistent'} history`, { timeout: 120000 }, async t => {
   const parent = resolve('.test-artifacts');
   await mkdir(parent, { recursive: true });
   const root = await mkdtemp(join(parent, 'native-'));
@@ -23,6 +23,7 @@ test('native Codex executes a tool, appends its result and reopens a persistent 
   const bindings = join(root, 'bindings');
   await Promise.all([mkdir(workspace), mkdir(home)]);
   const nonce = `NATIVE_${randomBytes(16).toString('hex')}`;
+  const thought = `THOUGHT_${randomBytes(16).toString('hex')}`;
   await writeFile(join(workspace, 'input.txt'), nonce + '\n');
   const socketPath = join(root, 'w.sock');
   const sockets = new Set();
@@ -62,6 +63,16 @@ test('native Codex executes a tool, appends its result and reopens a persistent 
           } else if (r.op === 'rebuild') {
             assert.ok(sessions.has(session));
             sessions.get(session).tools = r.tools;
+            sessions.get(session).pending = [];
+            if (compact && generations === 1) {
+              assert.equal(r.tools.length, 0, 'Local compaction must not expose executable tools');
+              assert.ok(JSON.stringify(r.messages).includes('PARITY_COMPACT_REQUEST'));
+              assert.ok(JSON.stringify(r.messages).includes(nonce), 'Compaction receives the actual executed tool result');
+            }
+            if (compact && generations === 2) {
+              assert.ok(JSON.stringify(r.messages).includes('PARITY_SUMMARY_'), 'Summary replacement rebuilds the native history');
+              assert.ok(!r.messages.some(message => message.role === 'tool'), 'Prior tool effects are represented by the summary');
+            }
             send({ ok: true, marker: 0 });
           } else if (r.op === 'append') {
             if (r.role === 'tool') {
@@ -75,10 +86,13 @@ test('native Codex executes a tool, appends its result and reopens a persistent 
           } else if (r.op === 'generate') {
             const state = sessions.get(session);
             assert.ok(state);
-            assert.equal(r.reasoning, false);
+            assert.deepEqual(r.reasoning, { effort: 'high', budget_tokens: 512, history: 'preserve_tool_calls' });
+            assert.equal(r.max_tokens, 8192, 'Default output must use the advertised service limit, above 4096');
             generations++;
-            assert.ok(generations <= 3, 'No unexpected inference retries');
+            assert.ok(generations <= (compact ? 4 : 3), 'No unexpected inference retries');
             send({ event: 'start' });
+            send({ event: 'reasoning_delta', text: thought.slice(0, 10) });
+            send({ event: 'reasoning_delta', text: thought.slice(10) });
             send({ event: 'inference_progress', phase: 'prefill', state: 'running', tokens: 0, total: 10, elapsed_ms: 0 });
             send({ event: 'inference_progress', phase: 'prefill', state: 'finished', tokens: 10, total: 10, elapsed_ms: 5 });
             if (generations === 1) {
@@ -86,10 +100,13 @@ test('native Codex executes a tool, appends its result and reopens a persistent 
               send({ event: 'toolcall_start', id: 17, name: 'exec_command' });
               send({ event: 'toolcall_end', id: 17, name: 'exec_command', arguments: { cmd: 'cat input.txt', login: false, max_output_tokens: 1000, yield_time_ms: 1000 } });
               state.pending = [17];
-            } else send({ event: 'text_delta', text: generations === 2 ? nonce : 'NATIVE_REOPENED' });
+            } else {
+              const response = compact && generations === 2 ? `PARITY_SUMMARY_${nonce}` : generations === (compact ? 3 : 2) ? nonce : 'NATIVE_REOPENED';
+              send({ event: 'text_delta', text: response });
+            }
             state.marker++;
             send({ event: 'done', stop: generations === 1 ? 'tool_use' : 'stop', marker: state.marker,
-              usage: { input: 6, cache_read: 600, output: 3, total: 609, reasoning: 0, replayed: 0 },
+              usage: { input: compact && generations === 1 ? 59000 : 6, cache_read: 600, output: 3, total: compact && generations === 1 ? 59603 : 609, reasoning: 2, replayed: 0 },
               checkpoint: { saved: true, tokens: 609 } });
           } else throw new Error(`Unexpected native operation ${r.op}`);
         } catch (error) {
@@ -103,18 +120,21 @@ test('native Codex executes a tool, appends its result and reopens a persistent 
   await once(server, 'listening');
   t.after(async () => { for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve)); });
   const config = {
-    model_provider: 'xenolith', model_context_window: 65536, model_reasoning_effort: 'none', web_search: 'disabled',
+    model_provider: 'xenolith', model_reasoning_effort: 'high', web_search: 'disabled',
     'model_providers.xenolith.name': 'Xenolith', 'model_providers.xenolith.base_url': `unix://${socketPath}`,
     'model_providers.xenolith.wire_api': 'xenolith', 'model_providers.xenolith.requires_openai_auth': false,
     'model_providers.xenolith.supports_websockets': false, 'model_providers.xenolith.stream_max_retries': 0,
     'model_providers.xenolith.request_max_retries': 0,
   };
+  if (compact) Object.assign(config, { compact_prompt: 'PARITY_COMPACT_REQUEST', model_auto_compact_token_limit: 40000, model_post_turn_compact_threshold_percent: 0 });
   const flags = Object.entries(config).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]);
   async function invoke(resume, instruction) {
     const args = ['--no-daemon', 'exec', '--ignore-user-config', '--ignore-rules',
-      '--skip-git-repo-check', '--sandbox', 'read-only', '--json', '-C', workspace, '-m', 'xenocodex-sim',
+      '--skip-git-repo-check', '--sandbox', 'read-only', '--json', '-C', workspace,
       ...flags, ...(resume ? ['resume', '--last'] : []), instruction];
-    const child = spawn(binary, args, { cwd: workspace, env: { ...process.env, CODEX_HOME: home, XENOLITH_STATE_DIR: bindings }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const inheritedEnv = { ...process.env };
+    delete inheritedEnv.XENOLITH_MAX_OUTPUT_TOKENS;
+    const child = spawn(binary, args, { cwd: workspace, env: { ...inheritedEnv, CODEX_HOME: home, XENOLITH_STATE_DIR: bindings, XENOLITH_REASONING_BUDGET: '512', XENOLITH_REASONING_HISTORY: 'preserve_tool_calls' }, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
     child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; });
     child.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
@@ -133,16 +153,31 @@ test('native Codex executes a tool, appends its result and reopens a persistent 
     assert.equal(first.findLast(e => e.type === 'item.completed' && e.item?.type === 'agent_message')?.item.text, nonce);
     const second = await invoke(true, 'Continue this conversation.');
     assert.equal(second.findLast(e => e.type === 'item.completed' && e.item?.type === 'agent_message')?.item.text, 'NATIVE_REOPENED');
-    assert.equal(generations, 3);
+    assert.equal(generations, compact ? 4 : 3);
     assert.equal(requests.filter(r => r.op === 'create').length, 1);
-    assert.equal(requests.filter(r => r.op === 'rebuild').length, 1);
-    assert.equal(requests.filter(r => r.op === 'open').length, 2);
+    assert.equal(requests.filter(r => r.op === 'rebuild').length, compact ? 3 : 1);
+    assert.equal(requests.filter(r => r.op === 'open').length, compact ? 3 : 2);
     assert.equal(failures.length, 0, failures.join('\n'));
     const records = (await readdir(bindings)).filter(name => name.endsWith('.json'));
     assert.equal(records.length, 1);
     const record = JSON.parse(await readFile(join(bindings, records[0]), 'utf8'));
     assert.equal(record.in_flight, false);
-    assert.equal(record.epoch, 3);
+    assert.equal(record.epoch, compact ? 4 : 3);
+    assert.equal(record.model, 'xenocodex-sim');
+    const reasoningItems = record.history.filter(item => item.type === 'reasoning');
+    assert.equal(reasoningItems.length, compact ? 2 : 3, 'Reasoning persists across tool continuation and resume');
+    assert.ok(reasoningItems.every(item => JSON.stringify(item).includes(thought)));
+    const rolloutFiles = await readdir(join(home, 'sessions'), { recursive: true });
+    const rollouts = await Promise.all(rolloutFiles.filter(name => name.endsWith('.jsonl')).map(name => readFile(join(home, 'sessions', name), 'utf8')));
+    const events = rollouts.flatMap(text => text.trim().split('\n').map(line => JSON.parse(line)));
+    assert.ok(events.some(event => event.type === 'response_item' && event.payload?.type === 'reasoning' && JSON.stringify(event.payload).includes(thought)), 'Raw reasoning is persisted as reasoning content');
+    const turns = events.filter(event => event.type === 'event_msg' && event.payload?.type === 'task_started');
+    assert.equal(turns.length, 2);
+    assert.ok(turns.every(event => event.payload.model_context_window === Math.floor(65536 * 0.95)), 'Discovered context reaches Codex with its normal 5% headroom');
+    assert.ok(events.filter(event => event.type === 'turn_context').every(event => event.payload.model === 'xenocodex-sim'), 'Discovered model is recorded in actual turn settings');
+    if (compact) assert.ok(events.some(event => event.type === 'compacted'), 'Codex must commit a compaction checkpoint');
+    assert.ok(events.some(event => event.type === 'session_meta' && event.payload?.model_provider === 'xenolith'));
+    assert.ok(!first.concat(second).some(event => event.item?.type === 'agent_message' && event.item.text.includes(thought)), 'Reasoning must never become assistant answer text');
     console.log(`Native simulator artifacts: ${root}`);
   } finally {
     await writeFile(join(root, 'wire.json'), JSON.stringify(requests, null, 2));

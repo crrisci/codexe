@@ -3,6 +3,7 @@
 
 //! Small native entry point: no HTTP, SSE parser or Responses request builder.
 mod config;
+pub use config::configure;
 
 use crate::client_common::{Prompt, ResponseEvent, ResponseStream};
 use codex_protocol::error::{CodexErrorDetails, Result};
@@ -60,7 +61,7 @@ pub(crate) fn stream(
             .map(serde_json::to_value)
             .collect::<std::result::Result<_, _>>()?,
         max_tokens: generation.max_tokens,
-        context_window: None,
+        context_window: model.max_context_window.map(|value| value as u64),
         reasoning: generation.reasoning,
     };
     let (tx, rx_event) = mpsc::channel(128);

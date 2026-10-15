@@ -2260,6 +2260,8 @@ async fn load_config_with_worktree_source_policy(
             )
             .await?;
     }
+    #[cfg(unix)]
+    let config = crate::legacy_core::xenolith::configure(config).await?;
     Ok(config)
 }
 

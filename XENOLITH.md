@@ -7,6 +7,8 @@ No HTTP adapter is required. CodeXe still owns the agent loop, shell tools, appr
 and conversation history. Xenolith owns inference, native sessions and KV snapshots.
 
 Baseline: `rust-v0.162.1`, commit `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`.
+The native contract follows Xenolith main `88e8661d190985c50c638049dd2fec195a0fec63`
+and the client behavior is informed by XenoPi `e92a082b4070fd569bd26648fd374474d5d89cf6`.
 Current limitations are listed below.
 
 ## Build
@@ -26,14 +28,12 @@ The CLI is `codex-rs/target/debug/codex`; the controller is
 `codex-rs/xenolith-wire/target/debug/xenolith-session`.
 The tagged upstream workspace may regenerate package versions in Cargo.lock;
 use the build command above rather than `--locked` for this development branch.
-The transport is Unix-only; use WSL on Windows. A full macOS CLI build has not been
-validated in this milestone, although wire/backend tests passed on macOS.
+The Xenolith integration targets Linux and WSL, matching the current Intel Xe
+engine. macOS and native Windows are not supported engine targets.
 
 ## Start and configure
 
-Start your compiled Xenolith explicitly with isolated state/cache directories.
-Use the served model and context capacity reported by its `describe` operation.
-For example, with a GGUF model and a configured context of 65536:
+You can connect to an engine you start yourself:
 
 ```sh
 /path/to/xenolith serve /path/to/model.gguf --ctx 65536 \
@@ -52,12 +52,11 @@ export XENOLITH_STATE_DIR=/absolute/private/codex-bindings
 mkdir -p "$CODEX_HOME" "$XENOLITH_STATE_DIR"
 ```
 
-Write `$CODEX_HOME/config.toml` with the exact model identifier returned by Xenolith:
+Write `$CODEX_HOME/config.toml`. The model, context and reasoning choices come
+from `describe`; no model catalog or hardcoded model identifier is required:
 
 ```toml
-model = "YOUR_SERVED_MODEL"
 model_provider = "xenolith"
-model_context_window = 65536
 model_reasoning_effort = "none"
 web_search = "disabled"
 
@@ -77,16 +76,49 @@ Then start the compiled CLI from your coding workspace:
 /absolute/codexe/codex-rs/target/debug/codex
 ```
 
-Use the same home, binding directory and engine state/cache when resuming. The
-native backend connects to an existing engine; it does not start/stop it implicitly.
-No API key is required for this provider. Model/context discovery in the picker is
-not implemented; the example model name must match your own engine.
+Use the same home, binding directory and engine state/cache when resuming.
+No API key is required for this provider. An explicit `model` must match the
+served model. An explicit positive `model_context_window` may reserve a smaller
+client budget but cannot exceed the service capacity. It does not resize the engine.
+`model_auto_compact_token_limit`, if set, must fit that budget. A changed engine
+context after discovery stops inference before session mutation; restart CodeXe
+to rediscover the new capacity.
 
-## Reasoning and output
+### Optional engine startup
+
+Instead of starting the engine manually, configure its executable and model:
+
+```sh
+export XENOLITH_BIN=/absolute/path/to/xenolith
+export XENOLITH_MODEL=/absolute/path/to/model.gguf
+export XENOLITH_SOCKET=/absolute/private/wire.sock
+export XENOLITH_ENGINE_STATE_DIR=/absolute/private/engine-state
+export XENOLITH_ENGINE_CACHE_DIR=/absolute/private/engine-cache
+export XENOLITH_CONTEXT=65536
+```
+
+The provider's `base_url` takes precedence over `XENOLITH_SOCKET`; omit it to use
+the environment socket. If neither is set, the runtime/state directory supplies
+the default socket. `XENOLITH_BIN` defaults to `xenolith` on `PATH`.
+The model path is needed only when starting an absent service.
+Set `XENOLITH_NO_SPAWN=1` to require an already running service.
+
+CodeXe always attempts connection first. On startup it acquires Xenolith's
+global weight-owner lock and hands it to the child, preventing duplicate weight
+owners even when another client uses a different socket. A successfully started
+engine outlives CodeXe and remains available for resume or other clients;
+`XENOLITH_IDLE_SHUTDOWN` controls idle shutdown in minutes (default 30).
+An optional `XENOLITH_CACHE_BUDGET`, such as `4GiB`, is passed to the engine.
+Startup failures include the engine's log tail. An unrelated engine is never
+terminated. Engine state/cache variables are distinct from `XENOLITH_STATE_DIR`,
+which continues to hold CodeXe conversation bindings.
+
+### Reasoning and output
 
 Set `model_reasoning_effort` to a service-supported level (`low`, `medium`,
 `high`, `max`); omitted or `none` disables reasoning. Compatibility aliases
 `minimal` and `xhigh` map to `low` and `high`, respectively, as in XenoPi.
+Only advertised levels appear in the discovered model's reasoning choices.
 Use `show_raw_agent_reasoning = true` to display the native reasoning channel
 in interfaces that hide raw reasoning by default. It is stored separately from
 assistant text and is not presented as a provider-generated summary.
@@ -110,6 +142,10 @@ Bindings are durable, atomic and locked. The native path never uses ephemeral
 requests or deletes sessions belonging to another client. It reopens unchanged
 history, appends continuations and explicitly rebuilds after changed context or an
 uncertain interrupted mutation. A divergent committed marker stops for investigation.
+Reasoning can be recorded when the stream transitions to visible text, before
+the engine commits the full generation. Recovery reconciles that partial history
+by rebuilding; executable tool items are still published only after validated
+completion and a durable binding write.
 
 TUI status displays actual wire prefill progress, prefill/decode rates, reused cache
 and snapshot/reconstruction reports. Missing measurements stay unavailable. Actual
@@ -140,19 +176,34 @@ From the fork root:
 ```sh
 cargo test --manifest-path codex-rs/xenolith-wire/Cargo.toml
 XENOCODEX_NATIVE_CODEX_BIN="$PWD/codex-rs/target/debug/codex" \
-  node --test xenolith/tests/test-codex.mjs xenolith/tests/test-crash-tool.mjs
+  node --test --test-concurrency=1 xenolith/tests/test-*.mjs
 ```
 
 The CLI acceptance tests require Node >=22 and the rebuilt fork. They use isolated
-homes and a simulated wire server, exercising real tool execution and resume after
-an interrupted tool-result append. They do not prove real KV restoration.
-GitHub CI checks the isolated wire/backend tests and acceptance script syntax;
-it does not load a real model or execute the full upstream suite.
+homes and simulated services, exercising real tool execution, discovery, reasoning,
+limits, compaction, optional startup and resume after an interrupted tool-result
+append. They do not prove real KV restoration. GitHub CI runs wire/backend tests,
+builds the CLI and executes these acceptance tests on Linux. It does not load a
+real model or execute the full upstream suite.
+
+For the opt-in real-model smoke, including live/restarted conversation resume
+and a separate probe that verifies actual KV snapshot loading, see
+[the smoke-test instructions](xenolith/tests/README.md).
 
 ## Unsupported in this milestone
 
 Media, hosted/deferred tools, nested namespaces and constrained JSON are rejected.
-Text, reasoning and function/custom tools with one namespace are supported.
-Output defaults to the service limit, with an optional lower client limit. Native temporary requests are not
+Function/custom tools with one namespace are supported. Native temporary requests are not
 exposed. Crash recovery conservatively rebuilds KV and cannot guarantee uncommitted
 streamed output. Automatic context saturation and GGUF incompatibility remain untested.
+
+## Keeping upstream syncs small
+
+Wire translation, persistence and service lifecycle live in the isolated
+`xenolith-wire` crate. Capability discovery uses Codex's existing custom model
+catalog; native settings stay in `core/src/xenolith/`. Keep the configuration
+resolution at inference runtime boundaries: generic config loading, help and
+configuration-only commands must not start an engine. Keep those hooks and
+provider dispatch small. Do not add native protocol fields to shared
+Codex schemas unless the interface actually needs them. This milestone leaves
+interactive rewind, deferred tools and distribution packaging for separate work.

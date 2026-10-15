@@ -581,6 +581,8 @@ pub async fn run_main_with_transport_options(
             })?
         }
     };
+    #[cfg(unix)]
+    let config = codex_core::xenolith::configure(config).await?;
     config.auth_config().validate()?;
     let auth_manager =
         AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false)

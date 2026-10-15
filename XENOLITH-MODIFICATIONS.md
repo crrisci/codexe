@@ -64,5 +64,18 @@ CodeXe branding updates rename the fork and its documentation links to
 remain compatible with Codex. The name alludes to Intel Xe; the project is
 independent of OpenAI and Intel.
 
-Native reasoning and generation settings also add `codex-rs/core/src/xenolith/config.rs`.
-These additions and their regression tests retain the Apache-2.0 license.
+The provider-parity follow-up also adds or modifies these integration points:
+
+- `codex-rs/core/src/xenolith/config.rs`
+- `codex-rs/core/src/session/mod.rs`
+- `codex-rs/exec/src/lib.rs`
+- `codex-rs/tui/src/lib.rs`
+- `codex-rs/app-server/src/lib.rs`
+- `codex-rs/app-server/src/in_process.rs`
+- `codex-rs/app-server-client/src/lib.rs`
+- `codex-rs/xenolith-wire/src/service.rs`
+
+These changes add native reasoning, capability discovery and optional Linux/WSL
+engine startup. They use existing model catalogs and runtime boundaries, keeping
+generic configuration loading independent of the engine. Added regression tests,
+CLI acceptance tests and documentation retain the Apache-2.0 license.
