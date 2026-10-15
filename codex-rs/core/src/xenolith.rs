@@ -39,14 +39,22 @@ pub(crate) fn stream(
             )
         })?;
     let socket = PathBuf::from(socket);
-    let state_dir = std::env::var_os("XENOLITH_STATE_DIR")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .ok_or_else(|| {
-            CodexErrorDetails::InvalidRequest(
-                "set XENOLITH_STATE_DIR to an isolated absolute directory".into(),
-            )
-        })?;
+    let state_dir = match std::env::var_os("XENOLITH_STATE_DIR") {
+        Some(path) => {
+            let path = PathBuf::from(path);
+            if !path.is_absolute() {
+                return Err(CodexErrorDetails::InvalidRequest(
+                    "XENOLITH_STATE_DIR must be an absolute directory".into(),
+                )
+                .into());
+            }
+            path
+        }
+        None => crate::config::find_codex_home()
+            .map_err(|error| CodexErrorDetails::InvalidRequest(error.to_string()))?
+            .join("xenolith/bindings")
+            .to_path_buf(),
+    };
     let input = backend::Prompt {
         model: model.slug.clone(),
         instructions: prompt.base_instructions.text.clone(),

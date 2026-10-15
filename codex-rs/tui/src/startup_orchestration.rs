@@ -506,7 +506,16 @@ pub(super) async fn run_main_inner(
     } else {
         None
     };
+    let native_embedded = daemon_startup::native_requires_embedded(
+        config.model_provider.wire_api,
+        cli.agents_overview,
+        &app_server_target,
+    );
+    if native_embedded {
+        app_server_target = AppServerTarget::Embedded;
+    }
     let auto_start_daemon = config.features.enabled(Feature::DaemonAutoStart)
+        && !native_embedded
         && !cli.agents_overview
         && !cli.no_daemon
         && !app_server_target.uses_remote_workspace();

@@ -33,7 +33,22 @@ engine. macOS and native Windows are not supported engine targets.
 
 ## Start and configure
 
-You can connect to an engine you start yourself:
+On Linux/WSL, Xenolith is built in and selected when no provider is explicitly
+configured. From your coding workspace, the ordinary command is:
+
+```sh
+XENOLITH_BIN=/absolute/path/to/xenolith \
+XENOLITH_MODEL=/absolute/path/to/model.gguf \
+/absolute/codexe/codex-rs/target/debug/codex
+```
+
+Omit `XENOLITH_BIN` when `xenolith` is on `PATH`. Omit both variables when an
+engine is already running on the default socket. The interactive native path
+uses the fork's embedded server, so no `--no-daemon` flag or managed daemon
+installation is needed. Explicit remote/shared-server workflows are separate
+from this local path.
+
+You can also connect to an engine you start yourself:
 
 ```sh
 /path/to/xenolith serve /path/to/model.gguf --ctx 65536 \
@@ -42,32 +57,33 @@ You can connect to an engine you start yourself:
   --cache /absolute/private/engine-cache
 ```
 
-Use a new private CodeXe home and native binding directory. Keep these, as well as
-engine state/cache, to resume conversations and restore KV across processes.
-Do not share a native binding directory between unrelated CodeXe homes.
+For that custom socket, start CodeXe with
+`XENOLITH_SOCKET=/absolute/private/wire.sock`. Provider registration, model and
+context discovery need no configuration file. Native sessions automatically
+disable provider-hosted web search.
+
+CodeXe uses the normal Codex home (`~/.codex`, overridden by `CODEX_HOME`). Native
+bindings default to `$CODEX_HOME/xenolith/bindings`; `XENOLITH_STATE_DIR` optionally
+overrides that absolute path. Keep the home, bindings and engine state/cache to
+resume conversations and restore KV across processes. Do not share a binding
+directory between unrelated homes.
+
+An optional separate home can keep CodeXe apart from another Codex installation:
 
 ```sh
 export CODEX_HOME=/absolute/private/codex-home
-export XENOLITH_STATE_DIR=/absolute/private/codex-bindings
-mkdir -p "$CODEX_HOME" "$XENOLITH_STATE_DIR"
+mkdir -p "$CODEX_HOME"
 ```
 
-Write `$CODEX_HOME/config.toml`. The model, context and reasoning choices come
-from `describe`; no model catalog or hardcoded model identifier is required:
+For optional preferences, edit `$CODEX_HOME/config.toml`. For example, enable
+reasoning and override the default socket:
 
 ```toml
-model_provider = "xenolith"
-model_reasoning_effort = "none"
-web_search = "disabled"
+model_reasoning_effort = "low"
+show_raw_agent_reasoning = true
 
 [model_providers.xenolith]
-name = "Xenolith"
 base_url = "unix:///absolute/private/wire.sock"
-wire_api = "xenolith"
-requires_openai_auth = false
-supports_websockets = false
-request_max_retries = 0
-stream_max_retries = 0
 ```
 
 Then start the compiled CLI from your coding workspace:
@@ -83,6 +99,13 @@ client budget but cannot exceed the service capacity. It does not resize the eng
 `model_auto_compact_token_limit`, if set, must fit that budget. A changed engine
 context after discovery stops inference before session mutation; restart CodeXe
 to rediscover the new capacity.
+
+Explicit provider selection through configuration, profiles or CLI takes
+precedence over the Xenolith default. Existing configurations that relied on
+implicit OpenAI selection must add `model_provider = "openai"`, including those
+that only specified an OpenAI model. The reserved built-in provider `xenolith`
+always uses the native transport and no OpenAI authentication; socket and retry
+settings can still be overridden. Other providers keep their own capabilities.
 
 ### Optional engine startup
 

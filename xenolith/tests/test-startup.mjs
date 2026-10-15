@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { connect } from 'node:net';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -163,7 +163,12 @@ async function fixture(t) {
   }
   const execute = overrides => invoke(['--no-daemon', 'exec', '--ignore-user-config', '--ignore-rules',
     '--skip-git-repo-check', '--sandbox', 'read-only', '--json', '-C', workspace, ...flags, 'Reply with the startup fixture response.'], overrides);
-  return { root, env, socket, engine, model, invoke, execute };
+  // Fresh-config public path: no provider definitions, provider selection,
+  // model/context values, web override or daemon bypass.
+  const executeDefault = (overrides = {}) => invoke(['exec', '--ignore-user-config', '--ignore-rules',
+    '--skip-git-repo-check', '--sandbox', 'read-only', '--json', '-C', workspace,
+    'Reply with the startup fixture response.'], { XENOLITH_STATE_DIR: undefined, ...overrides });
+  return { root, env, socket, engine, model, invoke, execute, executeDefault };
 }
 
 async function describe(socket) {
@@ -195,11 +200,134 @@ function assertCompleted(result) {
 test('help, version and config-only commands bypass native service startup', { timeout: 30000 }, async t => {
   const f = await fixture(t);
   for (const args of [['--help'], ['--version'], ['exec', '--help'], ['features', 'list']]) {
-    const result = await f.invoke(['--no-daemon', ...flags, ...args]);
+    const result = await f.invoke(args);
     assert.equal(result.code, 0, result.stderr + result.stdout);
   }
   assert.deepEqual(await records(join(f.root, 'spawns.jsonl')), []);
   assert.equal(await contents(join(f.root, 'requests.jsonl')), '');
+});
+
+test('fresh CLI uses built-in Xenolith and auto-starts the explicit engine without provider flags', { timeout: 60000 }, async t => {
+  const f = await fixture(t);
+  assertCompleted(await f.executeDefault());
+  const bindingDir = join(f.env.CODEX_HOME, 'xenolith', 'bindings');
+  const bindings = (await readdir(bindingDir)).filter(name => name.endsWith('.json'));
+  assert.equal(bindings.length, 1, 'Fresh native CLI must persist its default binding under CODEX_HOME');
+  const binding = JSON.parse(await readFile(join(bindingDir, bindings[0]), 'utf8'));
+  assert.equal(binding.model, 'startup-sim');
+  assert.equal(binding.in_flight, false);
+  const [engine] = await records(join(f.root, 'spawns.jsonl'));
+  assert.equal(engine.inherited_lock, true);
+  assert.equal(engine.args[1], f.model);
+  assert.equal((await records(join(f.root, 'spawns.jsonl'))).length, 1);
+  const requests = await records(join(f.root, 'requests.jsonl'));
+  assert.equal(requests.filter(request => request.op === 'generate').length, 1);
+  assert.ok(requests.filter(request => request.op === 'describe').length >= 2);
+  assert.equal(await contents(join(f.root, 'fixture-errors.jsonl')), '');
+  assert.ok(alive(engine.pid), 'Default CLI must leave its engine available');
+});
+
+test('default CLI rejects a relative explicit binding directory before inference', { timeout: 60000 }, async t => {
+  const f = await fixture(t);
+  const result = await f.executeDefault({ XENOLITH_STATE_DIR: 'relative-bindings' });
+  assert.equal(result.signal, null, result.stderr + result.stdout);
+  assert.notEqual(result.code, 0, result.stderr + result.stdout);
+  assert.match(result.stderr + result.stdout, /XENOLITH_STATE_DIR|absolute.*directory/i);
+  const requests = await records(join(f.root, 'requests.jsonl'));
+  assert.equal(requests.filter(request => request.op === 'generate').length, 0);
+  assert.equal(requests.filter(request => ['create', 'open', 'rebuild', 'append'].includes(request.op)).length, 0);
+});
+
+test('fresh CLI finds the default xenolith executable on PATH', { timeout: 60000 }, async t => {
+  const f = await fixture(t);
+  const bin = join(f.root, 'bin');
+  await mkdir(bin);
+  await symlink(f.engine, join(bin, 'xenolith'));
+  assertCompleted(await f.executeDefault({ XENOLITH_BIN: undefined, PATH: `${bin}:${f.env.PATH}` }));
+  const spawns = await records(join(f.root, 'spawns.jsonl'));
+  assert.equal(spawns.length, 1, 'PATH-discovered engine must auto-start exactly once');
+  assert.equal(spawns[0].inherited_lock, true);
+  assert.equal(spawns[0].args[1], f.model);
+  assert.equal(await contents(join(f.root, 'fixture-errors.jsonl')), '');
+});
+
+test('ordinary interactive TUI uses the native engine without a managed daemon package', { timeout: 45000 }, async t => {
+  const f = await fixture(t);
+  const workspace = join(f.root, 'workspace');
+  // Trust is unrelated to provider selection; avoid blocking on folder consent.
+  await writeFile(join(f.env.CODEX_HOME, 'config.toml'), `[projects.${JSON.stringify(workspace)}]\ntrust_level = "trusted"\n`);
+  const driver = String.raw`
+import errno, fcntl, json, os, pty, select, signal, struct, subprocess, sys, termios, time
+root = os.environ['CODEXE_STARTUP_FIXTURE_ROOT']
+master, slave = pty.openpty()
+fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 120, 0, 0))
+def child_terminal():
+    os.setsid()
+    fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+child = subprocess.Popen([sys.argv[1], '-C', root + '/workspace'], stdin=slave, stdout=slave, stderr=slave,
+                         env=os.environ, preexec_fn=child_terminal)
+os.close(slave)
+output = bytearray()
+ready = False
+interrupts = 0
+last_interrupt = 0
+started = time.monotonic()
+try:
+    while child.poll() is None and time.monotonic() - started < 30:
+        readable, _, _ = select.select([master], [], [], 0.05)
+        if readable:
+            try: data = os.read(master, 65536)
+            except OSError as error:
+                if error.errno == errno.EIO: break
+                raise
+            if not data: break
+            output.extend(data)
+            # Terminal capability/cursor probes need real terminal replies.
+            if b'\x1b[6n' in data: os.write(master, b'\x1b[1;1R')
+            if b'\x1b[c' in data: os.write(master, b'\x1b[?1;2c')
+            if b'\x1b[>c' in data: os.write(master, b'\x1b[>0;0;0c')
+            if b'\x1b[?u' in data: os.write(master, b'\x1b[?0u')
+        requests = ''
+        try:
+            with open(root + '/requests.jsonl') as source: requests = source.read()
+        except FileNotFoundError: pass
+        ready = ready or ('"describe"' in requests and b'startup-sim' in output)
+        now = time.monotonic()
+        if ready and interrupts < 3 and now - last_interrupt > 0.5:
+            os.write(master, b'\x03')
+            interrupts += 1
+            last_interrupt = now
+    if child.poll() is None:
+        # Escalation targets only this fresh PTY process group, never the engine.
+        os.killpg(child.pid, signal.SIGKILL)
+    code = child.wait(timeout=5)
+finally:
+    if child.poll() is None:
+        os.killpg(child.pid, signal.SIGKILL)
+        child.wait(timeout=5)
+    os.close(master)
+    with open(root + '/tui.tty.log', 'wb') as target: target.write(output)
+print(json.dumps({'ready': ready, 'code': code, 'interrupts': interrupts, 'tail': bytes(output[-8192:]).decode('utf-8', 'replace')}))
+`;
+  const env = { ...f.env, TERM: 'xterm-256color' };
+  delete env.XENOLITH_STATE_DIR;
+  const child = spawn('python3', ['-c', driver, binary], { cwd: workspace, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '', stderr = '';
+  child.stdout.setEncoding('utf8').on('data', data => { stdout += data; });
+  child.stderr.setEncoding('utf8').on('data', data => { stderr += data; });
+  const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
+  await Promise.all([writeFile(join(f.root, 'tui-driver.stdout.json'), stdout), writeFile(join(f.root, 'tui-driver.stderr.log'), stderr)]);
+  assert.equal(code, 0, stderr + stdout);
+  const result = JSON.parse(stdout);
+  assert.equal(result.ready, true, 'TUI must render the discovered native model: ' + result.tail);
+  assert.ok([0, 130, -2].includes(result.code), 'TUI must exit through the keyboard interrupt: ' + result.tail);
+  for (const path of ['packages/app-server-daemon', 'packages/standalone', 'app-server-daemon/daemon.pid', 'app-server-daemon/daemon-updater.pid']) {
+    await assert.rejects(readFile(join(f.env.CODEX_HOME, path)), error => error.code === 'ENOENT', 'TUI must not select a managed package or launch its daemon: ' + path);
+  }
+  const spawns = await records(join(f.root, 'spawns.jsonl'));
+  assert.equal(spawns.length, 1);
+  assert.ok(alive(spawns[0].pid));
+  assert.equal(await contents(join(f.root, 'fixture-errors.jsonl')), '');
 });
 
 test('CLI discovers by environment, starts once and leaves its engine available after exit', { timeout: 150000 }, async t => {
@@ -226,7 +354,7 @@ test('CLI discovers by environment, starts once and leaves its engine available 
   console.log(`Native startup artifacts: ${f.root}`);
 });
 
-test('CLI connects without a model and preserves an externally started engine', { timeout: 60000 }, async t => {
+test('fresh default CLI connects without a model and preserves an externally started engine', { timeout: 60000 }, async t => {
   const f = await fixture(t);
   const external = spawn(f.engine, ['serve', f.model, '--socket', f.socket, '--state', f.env.XENOLITH_ENGINE_STATE_DIR], {
     env: f.env, stdio: 'ignore', detached: true,
@@ -239,7 +367,7 @@ test('CLI connects without a model and preserves an externally started engine', 
     catch { await delay(50); }
   }
   assert.ok(ready, 'External fake engine must become ready');
-  assertCompleted(await f.execute({ XENOLITH_MODEL: undefined, XENOLITH_BIN: '/must/not/start', XENOLITH_NO_SPAWN: '1' }));
+  assertCompleted(await f.executeDefault({ XENOLITH_MODEL: undefined, XENOLITH_BIN: '/must/not/start', XENOLITH_NO_SPAWN: '1' }));
   assert.ok(alive(external.pid));
   assert.equal((await describe(f.socket)).ok, true);
   const spawns = await records(join(f.root, 'spawns.jsonl'));
@@ -258,9 +386,9 @@ test('CLI reports a failed engine executable with its startup diagnostics', { ti
   assert.ok((await records(join(f.root, 'spawns.jsonl'))).length >= 1);
 });
 
-test('app-server exposes the discovered single model and engine reasoning choices', { timeout: 45000 }, async t => {
+test('default app-server exposes the discovered single model and engine reasoning choices', { timeout: 45000 }, async t => {
   const f = await fixture(t);
-  const child = spawn(binary, ['--no-daemon', ...flags, 'app-server', '--stdio'], {
+  const child = spawn(binary, ['app-server', '--stdio'], {
     cwd: join(f.root, 'workspace'),
     env: { ...f.env, CODEXE_STARTUP_FIXTURE_EFFORTS: JSON.stringify(['low', 'high', 'max']) },
     stdio: ['pipe', 'pipe', 'pipe'],

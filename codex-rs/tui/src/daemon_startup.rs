@@ -21,6 +21,19 @@ const SERVER_FEATURES: [Feature; 4] = [
 pub(super) const FAILURE_HINT: &str = "To work without the background server, rerun the same command with --no-daemon (including resume or fork and its arguments).";
 pub(super) const WSL_DRVFS_EXCLUSION: &str = "a Windows-mounted WSL CODEX_HOME (DrvFS/9p)";
 
+/// A selected managed package may contain upstream Codex, and a running daemon
+/// cannot adopt this invocation's native engine environment. Keep local native
+/// sessions in this fork's process; explicit remote/shared selections stay explicit.
+pub(super) fn native_requires_embedded(
+    wire_api: codex_model_provider_info::WireApi,
+    agents_overview: bool,
+    target: &AppServerTarget,
+) -> bool {
+    wire_api == codex_model_provider_info::WireApi::Xenolith
+        && !agents_overview
+        && !target.uses_remote_workspace()
+}
+
 /// Returns whether `codex_home` is on a Windows-mounted WSL filesystem.
 pub fn uses_wsl_drvfs(codex_home: &std::path::Path) -> bool {
     // The managed daemon writes an executable and Unix-style state beneath CODEX_HOME.

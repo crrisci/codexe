@@ -12,7 +12,9 @@ XENOCODEX_NATIVE_CODEX_BIN="$PWD/codex-rs/target/debug/codex" \
 ```
 
 Linux/WSL, Node >=22, Python 3, `pgrep`, a working Codex shell sandbox and a
-rebuilt native CLI are required. The script refuses an existing engine or held
+rebuilt native CLI are required. The smoke uses built-in native provider/web
+defaults and ordinary CLI invocation; only its intended reasoning settings are
+passed as configuration overrides. The script refuses an existing engine or held
 shared engine lock, requires at least 21 GiB `MemAvailable`, and checks free disk
 against the KV cache budget plus 1 GiB. Context defaults to 16384 tokens and cache
 budget to `4GiB`; explicit `XENOLITH_CONTEXT` and `XENOLITH_CACHE_BUDGET` override
@@ -40,3 +42,14 @@ identities and a final `report.json` remain in private
 signals only the owned engine. Each CLI invocation has a ten-minute timeout;
 Ctrl-C or SIGTERM interrupts it and proceeds to owned-engine cleanup. SIGKILL
 cannot run cleanup; the report's private socket identifies the test owner.
+
+The simulator startup suite also exercises fresh configuration with no provider
+flags and ordinary `codex exec`: automatic startup via explicit `XENOLITH_BIN`,
+fallback to a `xenolith` executable on `PATH`, and connection to an existing
+engine without `XENOLITH_MODEL`. These cases omit manual model/context and web
+settings or `XENOLITH_STATE_DIR`, so the public defaults must discover the
+engine and persist bindings under `CODEX_HOME/xenolith/bindings`. A PTY case
+opens the ordinary interactive TUI, waits for its discovered model to render,
+and exits through keyboard interrupts while checking that no managed daemon
+package or PID file was created. Relative binding overrides are rejected before
+inference.

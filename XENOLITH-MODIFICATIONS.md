@@ -74,8 +74,20 @@ The provider-parity follow-up also adds or modifies these integration points:
 - `codex-rs/app-server/src/in_process.rs`
 - `codex-rs/app-server-client/src/lib.rs`
 - `codex-rs/xenolith-wire/src/service.rs`
+- `codex-rs/model-provider-info/src/xenolith.rs`
+- `codex-rs/config/src/config_toml.rs`
+- `codex-rs/core/src/config/mod.rs`
+- `codex-rs/core/src/config/config_tests.rs`
+- `codex-rs/tui/src/daemon_startup.rs`
+- `codex-rs/tui/src/daemon_startup_tests.rs`
+- `codex-rs/tui/src/startup_orchestration.rs`
 
 These changes add native reasoning, capability discovery and optional Linux/WSL
 engine startup. They use existing model catalogs and runtime boundaries, keeping
 generic configuration loading independent of the engine. Added regression tests,
 CLI acceptance tests and documentation retain the Apache-2.0 license.
+
+The native startup follow-up registers Xenolith as the Unix default when no
+provider is selected, supplies native storage and capability defaults, and keeps
+ordinary local native TUI sessions in the invoking fork's embedded server.
+Explicit provider choices and remote/shared-server workflows remain separate.

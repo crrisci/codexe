@@ -50,6 +50,8 @@ jobs:
           for script in xenolith/tests/*.mjs; do node --check "$script"; done
       - name: Build the actual native CLI
         run: cargo +1.95.0 build --manifest-path codex-rs/Cargo.toml -p codex-cli --bin codex -j 2
+      - name: Check built-in Xenolith provider defaults
+        run: cargo +1.95.0 test --manifest-path codex-rs/Cargo.toml -p codex-model-provider-info -p codex-config --lib xenolith -j 2
       - name: Exercise native discovery, reasoning, tools and recovery through the CLI
         env:
           XENOCODEX_NATIVE_CODEX_BIN: ${{ github.workspace }}/codex-rs/target/debug/codex

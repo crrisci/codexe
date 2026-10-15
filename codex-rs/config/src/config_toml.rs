@@ -41,6 +41,7 @@ use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
+use codex_model_provider_info::XENOLITH_PROVIDER_ID;
 use codex_protocol::config_types::AutoCompactTokenLimitScope;
 use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::config_types::Personality;
@@ -965,7 +966,7 @@ pub fn validate_model_providers(
 `{AMAZON_BEDROCK_PROVIDER_ID}` or `{AMAZON_BEDROCK_RUNTIME_PROVIDER_ID}`"
                 ));
             }
-            if provider.name.trim().is_empty() {
+            if key != XENOLITH_PROVIDER_ID && provider.name.trim().is_empty() {
                 return Err(format!(
                     "model_providers.{key}: provider name must not be empty"
                 ));
@@ -1013,6 +1014,20 @@ pub fn validate_oss_provider(provider: &str) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn native_xenolith_accepts_a_socket_only_builtin_override() {
+        let config: ConfigToml = toml::from_str(
+            "[model_providers.xenolith]\nbase_url = 'unix:///tmp/private-xenolith.sock'",
+        )
+        .unwrap();
+        assert_eq!(
+            config.model_providers[XENOLITH_PROVIDER_ID]
+                .base_url
+                .as_deref(),
+            Some("unix:///tmp/private-xenolith.sock")
+        );
+    }
 
     const WORKSPACE_ID_A: &str = "123e4567-e89b-42d3-a456-426614174000";
     const WORKSPACE_ID_B: &str = "123e4567-e89b-42d3-a456-426614174001";

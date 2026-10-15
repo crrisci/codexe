@@ -6,6 +6,47 @@ use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 #[test]
+fn native_xenolith_sessions_use_this_process_without_reusing_a_managed_package() {
+    use codex_model_provider_info::WireApi;
+
+    let endpoint = RemoteAppServerEndpoint::WebSocket {
+        websocket_url: "ws://127.0.0.1:9999".to_string(),
+        auth_token: None,
+    };
+    for allow_embedded_fallback in [false, true] {
+        let target = AppServerTarget::LocalDaemon {
+            endpoint: endpoint.clone(),
+            allow_embedded_fallback,
+        };
+        assert!(daemon_startup::native_requires_embedded(
+            WireApi::Xenolith,
+            false,
+            &target,
+        ));
+        assert!(!daemon_startup::native_requires_embedded(
+            WireApi::Responses,
+            false,
+            &target,
+        ));
+        assert!(!daemon_startup::native_requires_embedded(
+            WireApi::Xenolith,
+            true,
+            &target,
+        ));
+    }
+    assert!(daemon_startup::native_requires_embedded(
+        WireApi::Xenolith,
+        false,
+        &AppServerTarget::Embedded,
+    ));
+    assert!(!daemon_startup::native_requires_embedded(
+        WireApi::Xenolith,
+        false,
+        &AppServerTarget::Remote { endpoint },
+    ));
+}
+
+#[test]
 fn audited_overrides_allow_daemon_without_allowing_arbitrary_config() {
     for (raw, eligible) in [
         ("features.transcript_v2=true", true),

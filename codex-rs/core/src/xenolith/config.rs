@@ -6,6 +6,7 @@ use crate::config::Config;
 use codex_model_provider_info::WireApi;
 use codex_models_manager::model_info::model_info_from_slug;
 use codex_protocol::config_types::ReasoningSummary;
+use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::openai_models::{
     InputModality, ModelInfo, ModelVisibility, ModelsResponse, ReasoningEffort,
     ReasoningEffortPreset,
@@ -124,6 +125,12 @@ pub async fn configure(mut config: Config) -> io::Result<Config> {
     if config.model_provider.wire_api != WireApi::Xenolith {
         return Ok(config);
     }
+    // Native Xenolith exposes local tools, not the provider-hosted web search API.
+    // Apply this only to native sessions and preserve administrator constraints.
+    config
+        .web_search_mode
+        .set(WebSearchMode::Disabled)
+        .map_err(|error| invalid(format!("Xenolith requires web_search=disabled: {error}")))?;
     let generation = GenerationSettings::from_env(config.model_reasoning_effort.as_ref())?;
     let settings = ServiceSettings::from_env(config.model_provider.base_url.as_deref())?;
     let socket = settings.socket.clone();

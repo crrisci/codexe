@@ -109,11 +109,8 @@ async function rollouts(home) {
 }
 async function invoke(label, resume, prompt, expected, requireTool = false) {
   checkInterrupted();
-  const flags = { model_provider: 'xenolith', model_reasoning_effort: 'low', show_raw_agent_reasoning: true, web_search: 'disabled',
-    'model_providers.xenolith.name': 'Xenolith', 'model_providers.xenolith.wire_api': 'xenolith',
-    'model_providers.xenolith.requires_openai_auth': false, 'model_providers.xenolith.supports_websockets': false,
-    'model_providers.xenolith.stream_max_retries': 0, 'model_providers.xenolith.request_max_retries': 0 };
-  const child = spawn(env.XENOCODEX_NATIVE_CODEX_BIN, ['--no-daemon', 'exec', '--ignore-user-config', '--ignore-rules',
+  const flags = { model_reasoning_effort: 'low', show_raw_agent_reasoning: true };
+  const child = spawn(env.XENOCODEX_NATIVE_CODEX_BIN, ['exec', '--ignore-user-config', '--ignore-rules',
     '--skip-git-repo-check', '--sandbox', 'read-only', '--json', '-C', join(root, 'workspace'),
     ...Object.entries(flags).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]),
     ...(resume ? ['resume', '--last'] : []), prompt], { cwd: join(root, 'workspace'), env, stdio: ['ignore', 'pipe', 'pipe'] });

@@ -36,10 +36,13 @@ use std::time::Duration;
 
 mod capabilities;
 mod gateway_oauth;
+mod xenolith;
 pub use capabilities::ModelProviderCapabilities;
 pub use capabilities::RemoteCompactionSupport;
 pub use gateway_oauth::GatewayOAuthConfig;
 pub use gateway_oauth::GatewayOAuthDelivery;
+pub use xenolith::DEFAULT_MODEL_PROVIDER_ID;
+pub use xenolith::XENOLITH_PROVIDER_ID;
 
 pub const RESIDENCY_HEADER_NAME: &str = "x-openai-internal-codex-residency";
 
@@ -680,7 +683,7 @@ pub fn built_in_model_providers(
     // providers are bundled with Codex CLI, so we only include the OpenAI and
     // open source ("oss") providers by default. Users are encouraged to add to
     // `model_providers` in config.toml to add their own providers.
-    [
+    let mut providers = [
         (OPENAI_PROVIDER_ID, openai_provider),
         (AMAZON_BEDROCK_PROVIDER_ID, amazon_bedrock_provider),
         (
@@ -698,7 +701,9 @@ pub fn built_in_model_providers(
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
-    .collect()
+    .collect::<HashMap<_, _>>();
+    providers.insert(XENOLITH_PROVIDER_ID.to_owned(), xenolith::provider());
+    providers
 }
 
 /// Merge configured providers into the built-in provider catalog.
@@ -711,7 +716,9 @@ pub fn merge_configured_model_providers(
     configured_model_providers: HashMap<String, ModelProviderInfo>,
 ) -> Result<HashMap<String, ModelProviderInfo>, String> {
     for (key, mut provider) in configured_model_providers {
-        if matches!(
+        if key == XENOLITH_PROVIDER_ID {
+            model_providers.insert(key, xenolith::merge_override(provider));
+        } else if matches!(
             key.as_str(),
             AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
         ) {
