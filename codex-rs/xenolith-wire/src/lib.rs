@@ -33,6 +33,7 @@ impl Drop for CancellationWatch {
 }
 
 pub mod backend;
+mod images;
 pub mod protocol;
 pub mod service;
 
@@ -76,7 +77,7 @@ impl WireConnection {
     }
 
     pub fn set_max_frame(&mut self, max_frame: usize) -> io::Result<()> {
-        if !(1..=16 * 1024 * 1024).contains(&max_frame) {
+        if !(1..=96 * 1024 * 1024).contains(&max_frame) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "invalid max_frame",

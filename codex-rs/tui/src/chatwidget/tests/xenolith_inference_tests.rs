@@ -13,6 +13,28 @@ fn native(thread: ThreadId, turn: &str, phase: &str, details: &str) -> ServerNot
     )
 }
 
+#[tokio::test]
+async fn native_image_preparation_shows_elapsed_time_until_prefill_or_cancel() {
+    let (mut chat, mut events, _ops) = make_chatwidget_manual(None).await;
+    let thread = ThreadId::new();
+    chat.thread_id = Some(thread);
+    handle_turn_started(&mut chat, "turn-1");
+    chat.handle_server_notification(native(thread, "turn-1", "preparing_image", ""), None);
+    let later = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    chat.refresh_native_image_time_at(later);
+    let rendered = render_bottom_popup(&chat, 80);
+    assert!(rendered.contains("Preparing image · 2s"), "{rendered}");
+    assert!(!rendered.contains("tok/s"));
+    assert!(!history_text(&mut events).contains("Preparing image"));
+    chat.handle_server_notification(native(thread, "turn-1", "prefill", "10/20 tokens"), None);
+    chat.refresh_native_image_time_at(later);
+    assert!(!render_bottom_popup(&chat, 80).contains("Preparing image"));
+    chat.handle_server_notification(native(thread, "turn-1", "preparing_image", ""), None);
+    handle_turn_interrupted(&mut chat, "turn-1");
+    chat.refresh_native_image_time_at(later);
+    assert!(!render_bottom_popup(&chat, 80).contains("Preparing image"));
+}
+
 fn history_text(events: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> String {
     drain_insert_history(events)
         .into_iter()

@@ -37,6 +37,7 @@ pub struct ServiceSettings {
     pub socket: PathBuf,
     pub binary: OsString,
     pub model: Option<PathBuf>,
+    pub mmproj: Option<PathBuf>,
     pub engine_state_dir: PathBuf,
     pub engine_cache_dir: PathBuf,
     /// The engine's global lock, independent of `--state` and socket overrides.
@@ -61,6 +62,16 @@ fn absolute(path: PathBuf, source: &str) -> io::Result<PathBuf> {
 }
 
 impl ServiceSettings {
+    /// Environment projector takes precedence over the provider's config.toml.
+    pub fn with_mmproj(mut self, configured: Option<&Path>) -> io::Result<Self> {
+        if self.mmproj.is_none() {
+            self.mmproj = configured
+                .map(|path| absolute(path.to_owned(), "mmproj"))
+                .transpose()?;
+        }
+        Ok(self)
+    }
+
     /// Provider `unix:///absolute/path` takes precedence over XENOLITH_SOCKET.
     /// XENOLITH_STATE_DIR belongs to native Codex bindings and is intentionally
     /// not read here. Engine data and KV cache use their own explicit overrides.
@@ -150,6 +161,10 @@ impl ServiceSettings {
                 .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| "xenolith".into()),
             model,
+            mmproj: env("XENOLITH_MMPROJ")
+                .filter(|s| !s.is_empty())
+                .map(|p| absolute(PathBuf::from(p), "XENOLITH_MMPROJ"))
+                .transpose()?,
             engine_state_dir,
             engine_cache_dir,
             engine_lock: default_state.join("engine.lock"),
@@ -477,6 +492,9 @@ fn spawn_service(
     if let Some(context) = settings.context {
         command.arg("--ctx").arg(context.to_string());
     }
+    if let Some(mmproj) = &settings.mmproj {
+        command.arg("--mmproj").arg(mmproj);
+    }
     if let Some(budget) = settings.cache_budget {
         command.arg("--cache-budget").arg(budget.to_string());
     }
@@ -614,6 +632,36 @@ while True:
             }
             let _ = fs::remove_dir_all(&self.root);
         }
+    }
+
+    #[test]
+    fn projector_config_and_environment_precedence() {
+        let lookup = |key: &str| (key == "HOME").then(|| OsString::from("/home/test"));
+        let settings = ServiceSettings::from_lookup(None, lookup)
+            .unwrap()
+            .with_mmproj(Some(Path::new("/models/config.gguf")))
+            .unwrap();
+        assert_eq!(
+            settings.mmproj.as_deref(),
+            Some(Path::new("/models/config.gguf"))
+        );
+        assert!(
+            ServiceSettings::from_lookup(None, lookup)
+                .unwrap()
+                .with_mmproj(Some(Path::new("relative.gguf")))
+                .is_err()
+        );
+        let settings = ServiceSettings::from_lookup(None, |key| match key {
+            "XENOLITH_MMPROJ" => Some("/models/env.gguf".into()),
+            _ => lookup(key),
+        })
+        .unwrap()
+        .with_mmproj(Some(Path::new("/models/config.gguf")))
+        .unwrap();
+        assert_eq!(
+            settings.mmproj.as_deref(),
+            Some(Path::new("/models/env.gguf"))
+        );
     }
 
     #[test]

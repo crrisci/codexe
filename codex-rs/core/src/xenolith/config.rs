@@ -1,8 +1,9 @@
 // Copyright (c) 2026 CodeXe contributors. Licensed under Apache-2.0.
 
 //! Resolve Xenolith capabilities through the existing custom-model catalog seam.
-//! Keeping native configuration here avoids changing upstream configuration schemas.
+//! Native settings are resolved at runtime, never by starting an engine during config loading.
 use crate::config::Config;
+use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
 use codex_models_manager::model_info::model_info_from_slug;
 use codex_protocol::config_types::ReasoningSummary;
@@ -22,6 +23,22 @@ use std::sync::{
 
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message.into())
+}
+
+pub(super) fn image_budget(provider: &ModelProviderInfo) -> io::Result<Option<u32>> {
+    let budget = match std::env::var("XENOLITH_IMAGE_BUDGET") {
+        Ok(value) => Some(
+            value
+                .parse::<u32>()
+                .map_err(|_| invalid("XENOLITH_IMAGE_BUDGET must be a positive integer"))?,
+        ),
+        Err(std::env::VarError::NotPresent) => provider.image_budget,
+        Err(_) => return Err(invalid("XENOLITH_IMAGE_BUDGET must be UTF-8")),
+    };
+    if budget.is_some_and(|value| value == 0 || value > i32::MAX as u32) {
+        return Err(invalid("image_budget must be a positive Xenolith integer"));
+    }
+    Ok(budget)
 }
 
 pub(super) struct GenerationSettings {
@@ -151,7 +168,9 @@ pub async fn configure_with_status(
         .set(WebSearchMode::Disabled)
         .map_err(|error| invalid(format!("Xenolith requires web_search=disabled: {error}")))?;
     let generation = GenerationSettings::from_env(config.model_reasoning_effort.as_ref())?;
-    let settings = ServiceSettings::from_env(config.model_provider.base_url.as_deref())?;
+    let image_budget = image_budget(&config.model_provider)?;
+    let settings = ServiceSettings::from_env(config.model_provider.base_url.as_deref())?
+        .with_mmproj(config.model_provider.mmproj.as_deref())?;
     let socket = settings.socket.clone();
     let requested_context = settings.context;
     let cancelled = Arc::new(AtomicBool::new(false));
@@ -162,6 +181,17 @@ pub async fn configure_with_status(
     .await
     .map_err(io::Error::other)??;
     generation.validate(&info)?;
+    if let Some(budget) = image_budget {
+        if info
+            .vision
+            .as_ref()
+            .is_none_or(|vision| !vision.budgets.contains(&budget))
+        {
+            return Err(invalid(
+                "image_budget requires a vision service advertising that budget",
+            ));
+        }
+    }
     if requested_context.is_some_and(|requested| requested != info.context_window) {
         config.startup_warnings.push(format!(
             "XENOLITH_CONTEXT requested {} tokens, but the running Xenolith service has {}; using the service capacity. Restart the engine to change it.",
@@ -265,6 +295,9 @@ fn discovered_model(info: &Describe, template: Option<ModelInfo>) -> ModelInfo {
     model.max_context_window = Some(info.context_window as i64);
     model.auto_compact_token_limit = None;
     model.input_modalities = vec![InputModality::Text];
+    if info.vision.is_some() {
+        model.input_modalities.push(InputModality::Image);
+    }
     model.supports_image_detail_original = false;
     model.supports_reasoning_summary_parameter = false;
     model.default_reasoning_summary = ReasoningSummary::None;

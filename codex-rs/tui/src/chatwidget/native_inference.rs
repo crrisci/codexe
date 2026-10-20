@@ -9,6 +9,7 @@ pub(super) struct NativeInferenceState {
     turn_id: String,
     summary: Option<String>,
     completed: bool,
+    image_started: Option<std::time::Instant>,
 }
 
 impl ChatWidget {
@@ -24,6 +25,7 @@ impl ChatWidget {
             "prefill" => "Prefill",
             "decode" => "Generating",
             "preparing" => "Preparing",
+            "preparing_image" => "Preparing image",
             "finalizing" => "Finalizing",
             "checkpoint" => "",
             // Connection, session, rebuild and rewind reports are diagnostics.
@@ -46,9 +48,27 @@ impl ChatWidget {
             turn_id: notification.turn_id,
             summary: (notification.phase == "checkpoint").then(|| details.to_owned()),
             completed: false,
+            image_started: (notification.phase == "preparing_image").then(std::time::Instant::now),
         });
         self.bottom_pane.set_native_inference(Some(message));
+        self.refresh_native_image_time_at(std::time::Instant::now());
         self.request_redraw();
+    }
+
+    pub(super) fn refresh_native_image_time_at(&mut self, now: std::time::Instant) {
+        let Some(started) = self
+            .status_state
+            .native_inference
+            .as_ref()
+            .and_then(|state| state.image_started)
+        else {
+            return;
+        };
+        let seconds = now.saturating_duration_since(started).as_secs();
+        self.bottom_pane
+            .set_native_inference(Some(format!("Preparing image · {seconds}s")));
+        self.frame_requester
+            .schedule_frame_in(std::time::Duration::from_secs(1));
     }
 
     pub(super) fn clear_native_inference(&mut self) {

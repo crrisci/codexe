@@ -29,6 +29,8 @@ pub(crate) fn merge_override(configured: ModelProviderInfo) -> ModelProviderInfo
         native.name = configured.name;
     }
     native.base_url = configured.base_url;
+    native.mmproj = configured.mmproj;
+    native.image_budget = configured.image_budget;
     native.request_max_retries = configured
         .request_max_retries
         .or(native.request_max_retries);
@@ -66,7 +68,7 @@ mod tests {
     #[test]
     fn native_socket_only_override_retains_native_transport() {
         let configured: ModelProviderInfo =
-            toml::from_str("base_url = 'unix:///tmp/private-xenolith.sock'").unwrap();
+            toml::from_str("base_url = 'unix:///tmp/private-xenolith.sock'\nmmproj = '/models/mmproj.gguf'\nimage_budget = 140").unwrap();
         let providers = merge_configured_model_providers(
             built_in_model_providers(None),
             HashMap::from([(XENOLITH_PROVIDER_ID.to_owned(), configured)]),
@@ -80,6 +82,11 @@ mod tests {
             Some("unix:///tmp/private-xenolith.sock")
         );
         assert!(!native.requires_openai_auth);
+        assert_eq!(
+            native.mmproj.as_deref(),
+            Some(std::path::Path::new("/models/mmproj.gguf"))
+        );
+        assert_eq!(native.image_budget, Some(140));
     }
 
     #[test]

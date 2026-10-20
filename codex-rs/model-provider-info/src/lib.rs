@@ -114,7 +114,7 @@ pub enum WireApi {
     /// The Responses API exposed by OpenAI at `/v1/responses`.
     #[default]
     Responses,
-    /// Local Xenolith wire v1 over a Unix socket, without an HTTP bridge.
+    /// Local Xenolith wire v1/v2 over a Unix socket, without an HTTP bridge.
     Xenolith,
 }
 
@@ -155,6 +155,10 @@ pub struct ModelProviderInfo {
     pub name: String,
     /// Base URL for the provider's OpenAI-compatible API.
     pub base_url: Option<String>,
+    /// Xenolith only: absolute projector path used when starting the local engine.
+    pub mmproj: Option<std::path::PathBuf>,
+    /// Xenolith only: visual token budget, validated against service capabilities.
+    pub image_budget: Option<u32>,
     /// Optional full URL for a Codex-native model catalog. When unset, OpenAI discovery
     /// uses the Codex backend unless `base_url` overrides the inference endpoint.
     pub model_catalog_url: Option<RedactedString>,
@@ -539,6 +543,8 @@ other non-default provider fields are not supported"
     pub fn create_openai_provider(base_url: Option<String>) -> ModelProviderInfo {
         ModelProviderInfo {
             name: OPENAI_PROVIDER_NAME.into(),
+            mmproj: None,
+            image_budget: None,
             base_url,
             model_catalog_url: None,
             env_key: None,
@@ -583,6 +589,8 @@ other non-default provider fields are not supported"
     ) -> ModelProviderInfo {
         ModelProviderInfo {
             name: AMAZON_BEDROCK_PROVIDER_NAME.into(),
+            mmproj: None,
+            image_budget: None,
             // The runtime provider derives the regional Mantle endpoint when
             // this is unset. A configured value is therefore unambiguously an
             // endpoint override.
@@ -772,6 +780,8 @@ pub fn create_oss_provider(default_provider_port: u16, wire_api: WireApi) -> Mod
 pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> ModelProviderInfo {
     ModelProviderInfo {
         name: "gpt-oss".into(),
+        mmproj: None,
+        image_budget: None,
         base_url: Some(base_url.into()),
         model_catalog_url: None,
         env_key: None,

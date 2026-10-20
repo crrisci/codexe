@@ -1701,6 +1701,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         supports_standalone_web_search: false,
         capabilities: None,
         include_internal_metadata: false,
+        ..Default::default()
     };
 
     send_request_with_provider(provider).await;
@@ -3204,6 +3205,7 @@ async fn azure_responses_request_does_not_store_and_preserves_prefixed_item_ids(
         supports_standalone_web_search: false,
         capabilities: None,
         include_internal_metadata: false,
+        ..Default::default()
     };
 
     let codex_home = TempDir::new().unwrap();
@@ -3840,6 +3842,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         supports_standalone_web_search: false,
         capabilities: None,
         include_internal_metadata: false,
+        ..Default::default()
     };
 
     // Init session
@@ -3928,6 +3931,7 @@ async fn env_var_overrides_loaded_auth() {
         supports_standalone_web_search: false,
         capabilities: None,
         include_internal_metadata: false,
+        ..Default::default()
     };
 
     // Init session

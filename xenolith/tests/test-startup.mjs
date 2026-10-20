@@ -348,6 +348,19 @@ print(json.dumps({'ready': ready, 'cold_start_seen': cold_start_seen, 'cancellat
   assert.equal(await contents(join(f.root, 'fixture-errors.jsonl')), '');
 });
 
+test('projector config is passed literally at startup and environment takes precedence', { timeout: 150000 }, async t => {
+  for (const override of [false, true]) {
+    const f = await fixture(t);
+    const configured = join(f.root, 'configured projector.gguf');
+    const selected = override ? join(f.root, 'override projector.gguf') : configured;
+    await writeFile(join(f.env.CODEX_HOME, 'config.toml'), `[model_providers.xenolith]\nmmproj = ${JSON.stringify(configured)}\n`);
+    const result = await f.invoke(['exec', '--ignore-rules', '--skip-git-repo-check', '--sandbox', 'read-only', '--json', 'Reply with the startup fixture response.'], override ? { XENOLITH_MMPROJ: selected } : {});
+    assertCompleted(result);
+    const [engine] = await records(join(f.root, 'spawns.jsonl'));
+    assert.equal(engine.args[engine.args.indexOf('--mmproj') + 1], selected);
+  }
+});
+
 test('CLI discovers by environment, starts once and leaves its engine available after exit', { timeout: 150000 }, async t => {
   const f = await fixture(t);
   assertCompleted(await f.execute());

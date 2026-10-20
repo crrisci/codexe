@@ -174,6 +174,8 @@ fn model_provider_from_proto(
         }
     };
     let info = ModelProviderInfo {
+        mmproj: None,
+        image_budget: None,
         name: provider.name,
         base_url: provider.base_url,
         model_catalog_url: provider.model_catalog_url.map(Into::into),
@@ -591,6 +593,7 @@ mod tests {
             aws: None,
             capabilities: None,
             include_internal_metadata: false,
+            ..Default::default()
         }
     }
 

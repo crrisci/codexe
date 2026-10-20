@@ -2813,6 +2813,16 @@
           "description": "Additional HTTP headers to include in requests to this provider where the (key, value) pairs are the header name and value.",
           "type": "object"
         },
+        "image_budget": {
+          "description": "Xenolith only: visual token budget, validated against service capabilities.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "mmproj": {
+          "description": "Xenolith only: absolute projector path used when starting the local engine.",
+          "type": "string"
+        },
         "model_catalog_url": {
           "description": "Optional full URL for a Codex-native model catalog. When unset, OpenAI discovery uses the Codex backend unless `base_url` overrides the inference endpoint.",
           "type": "string"
@@ -6755,7 +6765,7 @@
           "type": "string"
         },
         {
-          "description": "Local Xenolith wire v1 over a Unix socket, without an HTTP bridge.",
+          "description": "Local Xenolith wire v1/v2 over a Unix socket, without an HTTP bridge.",
           "enum": [
             "xenolith"
           ],

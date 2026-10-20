@@ -48,6 +48,7 @@ formats or reproducible generators do not carry hand-written source comments.
 - `codex-rs/xenolith-wire/src/backend.rs`
 - `codex-rs/xenolith-wire/src/bin/xenolith-session.rs`
 - `codex-rs/xenolith-wire/src/lib.rs`
+- `codex-rs/xenolith-wire/src/images.rs`
 - `codex-rs/xenolith-wire/src/protocol.rs`
 - `codex-rs/xenolith-wire/tests/native.rs`
 - `sdk/python/src/openai_codex/generated/notification_registry.py`

@@ -14,7 +14,7 @@ import { once } from 'node:events';
 const binary = process.env.XENOCODEX_NATIVE_CODEX_BIN;
 assert.ok(binary && isAbsolute(binary), 'Set XENOCODEX_NATIVE_CODEX_BIN to the absolute rebuilt fork binary');
 
-for (const compact of [false, true]) test(`discovered native model streams reasoning, executes a tool and resumes ${compact ? 'compacted' : 'persistent'} history`, { timeout: 120000 }, async t => {
+for (const vision of [false, true]) for (const compact of [false, true]) test(`discovered native ${vision ? 'vision' : 'text'} model streams reasoning, executes a tool and resumes ${compact ? 'compacted' : 'persistent'} history`, { timeout: 120000 }, async t => {
   const parent = resolve('.test-artifacts');
   await mkdir(parent, { recursive: true });
   const root = await mkdtemp(join(parent, 'native-'));
@@ -24,7 +24,10 @@ for (const compact of [false, true]) test(`discovered native model streams reaso
   await Promise.all([mkdir(workspace), mkdir(home)]);
   const nonce = `NATIVE_${randomBytes(16).toString('hex')}`;
   const thought = `THOUGHT_${randomBytes(16).toString('hex')}`;
+  const imageBudget = compact ? 70 : 140;
   await writeFile(join(workspace, 'input.txt'), nonce + '\n');
+  const imagePath = join(workspace, 'image.png');
+  if (vision) await writeFile(imagePath, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC', 'base64'));
   const socketPath = join(root, 'w.sock');
   const sockets = new Set();
   const requests = [];
@@ -47,8 +50,9 @@ for (const compact of [false, true]) test(`discovered native model streams reaso
         try {
           const r = JSON.parse(line);
           requests.push(r);
-          if (r.op === 'describe') send({ ok: true, protocol: 1, model: 'xenocodex-sim', context_window: 65536,
+          if (r.op === 'describe') send({ ok: true, protocol: vision ? 2 : 1, model: 'xenocodex-sim', context_window: 65536,
             max_output: 8192, max_frame: 1048576, kvstore: true,
+            ...(vision ? { vision: { formats: ['png', 'jpeg'], budgets: [70, 140, 280, 560, 1120], default_budget: 280, max_bytes: 48 * 1024 * 1024, max_context_media_bytes: 256 * 1024 * 1024, media_refs: true } } : {}),
             reasoning: { efforts: ['low', 'medium', 'high', 'max'], history: ['discard', 'preserve_tool_calls'], budget_tokens: true } });
           else if (r.op === 'create') {
             session = randomBytes(16).toString('hex');
@@ -64,10 +68,15 @@ for (const compact of [false, true]) test(`discovered native model streams reaso
             assert.ok(sessions.has(session));
             sessions.get(session).tools = r.tools;
             sessions.get(session).pending = [];
+            if (vision && generations === 0) {
+              assert.ok(r.messages.some(message => message.image?.data), 'CLI attachment must reach the engine as actual bytes');
+              assert.ok(r.messages.filter(message => message.image).every(message => message.image.budget === imageBudget), 'Budget follows config.toml and its environment override');
+            }
             if (compact && generations === 1) {
               assert.equal(r.tools.length, 0, 'Local compaction must not expose executable tools');
               assert.ok(JSON.stringify(r.messages).includes('PARITY_COMPACT_REQUEST'));
-              assert.ok(JSON.stringify(r.messages).includes(nonce), 'Compaction receives the actual executed tool result');
+              if (vision) assert.ok(r.messages.some(message => message.role === 'tool' && message.image?.data), 'Compaction receives the actual tool image');
+              else assert.ok(JSON.stringify(r.messages).includes(nonce), 'Compaction receives the actual executed tool result');
             }
             if (compact && generations === 2) {
               assert.ok(JSON.stringify(r.messages).includes('PARITY_SUMMARY_'), 'Summary replacement rebuilds the native history');
@@ -77,7 +86,11 @@ for (const compact of [false, true]) test(`discovered native model streams reaso
           } else if (r.op === 'append') {
             if (r.role === 'tool') {
               assert.equal(r.call_id, 17);
-              assert.ok(r.text.includes(nonce), 'Result must come from the actual executed tool');
+              if (vision) {
+                assert.ok(r.image?.data, 'Actual view_image must return image bytes');
+                assert.equal(r.image.budget, imageBudget);
+                assert.ok(Buffer.from(r.image.data, 'base64').length > 8);
+              } else assert.ok(r.text.includes(nonce), 'Result must come from the actual executed tool');
               sessions.get(session).pending = [];
             } else assert.equal(r.role, 'user');
             send({ ok: true, marker: sessions.get(session).marker });
@@ -96,9 +109,10 @@ for (const compact of [false, true]) test(`discovered native model streams reaso
             send({ event: 'inference_progress', phase: 'prefill', state: 'running', tokens: 0, total: 10, elapsed_ms: 0 });
             send({ event: 'inference_progress', phase: 'prefill', state: 'finished', tokens: 10, total: 10, elapsed_ms: 5 });
             if (generations === 1) {
-              assert.ok(state.tools.some(tool => tool.name === 'exec_command'), 'Actual Codex shell tool declaration required');
-              send({ event: 'toolcall_start', id: 17, name: 'exec_command' });
-              send({ event: 'toolcall_end', id: 17, name: 'exec_command', arguments: { cmd: 'cat input.txt', login: false, max_output_tokens: 1000, yield_time_ms: 1000 } });
+              const name = vision ? 'view_image' : 'exec_command';
+              assert.ok(state.tools.some(tool => tool.name === name), `Actual Codex ${name} declaration required`);
+              send({ event: 'toolcall_start', id: 17, name });
+              send({ event: 'toolcall_end', id: 17, name, arguments: vision ? { path: imagePath } : { cmd: 'cat input.txt', login: false, max_output_tokens: 1000, yield_time_ms: 1000 } });
               state.pending = [17];
             } else {
               const response = compact && generations === 2 ? `PARITY_SUMMARY_${nonce}` : generations === (compact ? 3 : 2) ? nonce : 'NATIVE_REOPENED';
@@ -128,12 +142,15 @@ for (const compact of [false, true]) test(`discovered native model streams reaso
   };
   if (compact) Object.assign(config, { compact_prompt: 'PARITY_COMPACT_REQUEST', model_auto_compact_token_limit: 40000, model_post_turn_compact_threshold_percent: 0 });
   const flags = Object.entries(config).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]);
+  if (vision) await writeFile(join(home, 'config.toml'), '[model_providers.xenolith]\nimage_budget = 140\n');
   async function invoke(resume, instruction) {
-    const args = ['--no-daemon', 'exec', '--ignore-user-config', '--ignore-rules',
+    const args = ['--no-daemon', 'exec', ...(vision ? [] : ['--ignore-user-config']), '--ignore-rules',
       '--skip-git-repo-check', '--sandbox', 'read-only', '--json', '-C', workspace,
-      ...flags, ...(resume ? ['resume', '--last'] : []), instruction];
+      ...flags, ...(resume ? ['resume', '--last'] : vision ? ['--image', imagePath] : []), '--', instruction];
     const inheritedEnv = { ...process.env };
     delete inheritedEnv.XENOLITH_MAX_OUTPUT_TOKENS;
+    delete inheritedEnv.XENOLITH_IMAGE_BUDGET;
+    if (vision && compact) inheritedEnv.XENOLITH_IMAGE_BUDGET = String(imageBudget);
     const child = spawn(binary, args, { cwd: workspace, env: { ...inheritedEnv, CODEX_HOME: home, XENOLITH_STATE_DIR: bindings, XENOLITH_REASONING_BUDGET: '512', XENOLITH_REASONING_HISTORY: 'preserve_tool_calls' }, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
     child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; });
@@ -148,8 +165,8 @@ for (const compact of [false, true]) test(`discovered native model streams reaso
     return stdout.split('\n').filter(Boolean).map(line => JSON.parse(line));
   }
   try {
-    const first = await invoke(false, 'Read input.txt using exec_command and report its exact contents.');
-    assert.ok(first.some(e => e.type === 'item.completed' && e.item?.type === 'command_execution' && e.item.exit_code === 0));
+    const first = await invoke(false, vision ? 'Inspect the attached image and use view_image to open image.png.' : 'Read input.txt using exec_command and report its exact contents.');
+    if (!vision) assert.ok(first.some(e => e.type === 'item.completed' && e.item?.type === 'command_execution' && e.item.exit_code === 0));
     assert.equal(first.findLast(e => e.type === 'item.completed' && e.item?.type === 'agent_message')?.item.text, nonce);
     const second = await invoke(true, 'Continue this conversation.');
     assert.equal(second.findLast(e => e.type === 'item.completed' && e.item?.type === 'agent_message')?.item.text, 'NATIVE_REOPENED');

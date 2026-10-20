@@ -1,7 +1,7 @@
 // Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
 // Licensed under Apache-2.0; upstream copyright and notices are retained.
 
-//! Validated wire v1 replies and local inference events. No Responses transport.
+//! Validated wire v1/v2 replies and local inference events. No Responses transport.
 use crate::WireConnection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -39,6 +39,38 @@ pub struct ReasoningCapabilities {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct VisionCapabilities {
+    pub formats: Vec<String>,
+    pub budgets: Vec<u32>,
+    pub default_budget: u32,
+    pub max_bytes: u64,
+    pub max_context_media_bytes: u64,
+    pub media_refs: bool,
+}
+
+impl VisionCapabilities {
+    fn validate(&self) -> io::Result<()> {
+        if self.formats.is_empty()
+            || self
+                .formats
+                .iter()
+                .any(|format| !matches!(format.as_str(), "png" | "jpeg"))
+            || self.budgets.is_empty()
+            || self
+                .budgets
+                .iter()
+                .any(|budget| *budget == 0 || *budget > i32::MAX as u32)
+            || !self.budgets.contains(&self.default_budget)
+            || self.max_bytes == 0
+            || self.max_context_media_bytes < self.max_bytes
+        {
+            return Err(invalid("invalid Xenolith vision capabilities"));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Describe {
     pub protocol: u32,
     pub model: String,
@@ -47,13 +79,15 @@ pub struct Describe {
     pub max_frame: usize,
     pub kvstore: bool,
     pub reasoning: ReasoningCapabilities,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vision: Option<VisionCapabilities>,
 }
 
 impl Describe {
     pub fn discover(wire: &mut WireConnection) -> io::Result<Self> {
         let info: Self =
             serde_json::from_value(request(wire, serde_json::json!({"op":"describe"}))?)?;
-        if info.protocol != 1
+        if !matches!(info.protocol, 1 | 2)
             || info.model.trim().is_empty()
             || info.model.contains('\0')
             || info.context_window == 0
@@ -71,9 +105,14 @@ impl Describe {
                 .iter()
                 .any(|h| !["discard", "preserve_tool_calls"].contains(&h.as_str()))
         {
-            return Err(invalid("incompatible Xenolith v1 describe"));
+            return Err(invalid("incompatible Xenolith describe"));
         }
-        // v1 max_frame includes the terminating LF (unlike our framing API).
+        match (info.protocol, &info.vision) {
+            (1, None) => {}
+            (2, Some(vision)) => vision.validate()?,
+            _ => return Err(invalid("Xenolith vision capabilities require protocol v2")),
+        }
+        // Wire max_frame includes the terminating LF (unlike our framing API).
         if info.max_frame < 2 {
             return Err(invalid("invalid max_frame"));
         }

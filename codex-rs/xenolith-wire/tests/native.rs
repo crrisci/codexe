@@ -21,6 +21,64 @@ fn describe() -> Value {
         "max_output":4096,"max_frame":1048576,"kvstore":true,
         "reasoning":{"efforts":["low","medium","high","max"],"history":["discard","preserve_tool_calls"],"budget_tokens":true}})
 }
+fn vision_describe() -> Value {
+    let mut info = describe();
+    info["protocol"] = json!(2);
+    info["max_frame"] = json!(96 * 1024 * 1024);
+    info["vision"] = json!({
+        "formats": ["png", "jpeg"], "budgets": [70, 140, 280, 560, 1120],
+        "default_budget": 280, "max_bytes": 48 * 1024 * 1024,
+        "max_context_media_bytes": 256 * 1024 * 1024, "media_refs": true
+    });
+    info
+}
+
+#[test]
+fn discovers_vision_and_accepts_the_v2_frame_limit() {
+    let mut fake = Fake::new(vec![vec![("describe", vec![vision_describe()])]]);
+    let mut wire = WireConnection::connect(&fake.socket, 4096, Duration::from_secs(5)).unwrap();
+    let info = Describe::discover(&mut wire).unwrap();
+    assert_eq!(info.protocol, 2);
+    let vision = info.vision.unwrap();
+    assert_eq!(vision.default_budget, 280);
+    assert_eq!(vision.budgets, [70, 140, 280, 560, 1120]);
+    assert!(vision.media_refs);
+    fake.finish();
+}
+
+#[test]
+fn rejects_inconsistent_or_malformed_vision_capabilities() {
+    let mut cases = Vec::new();
+    let mut missing = vision_describe();
+    missing.as_object_mut().unwrap().remove("vision");
+    cases.push(missing);
+    let mut v1 = vision_describe();
+    v1["protocol"] = json!(1);
+    cases.push(v1);
+    for (field, value) in [
+        ("formats", json!([])),
+        ("formats", json!(["webp"])),
+        ("budgets", json!([])),
+        ("budgets", json!([0, 280])),
+        ("default_budget", json!(71)),
+        ("max_bytes", json!(0)),
+        ("max_context_media_bytes", json!(1)),
+        ("media_refs", json!("true")),
+    ] {
+        let mut bad = vision_describe();
+        bad["vision"][field] = value;
+        cases.push(bad);
+    }
+    let mut oversized = vision_describe();
+    oversized["max_frame"] = json!(96 * 1024 * 1024 + 2);
+    cases.push(oversized);
+    for info in cases {
+        let mut fake = Fake::new(vec![vec![("describe", vec![info])]]);
+        let mut wire = WireConnection::connect(&fake.socket, 4096, Duration::from_secs(5)).unwrap();
+        assert!(Describe::discover(&mut wire).is_err());
+        fake.finish();
+    }
+}
 fn done(stop: &str, marker: u64) -> Value {
     json!({"event":"done","stop":stop,"marker":marker,
         "usage":{"input":4,"cache_read":10,"output":2,"total":16,"reasoning":0,"replayed":0},
@@ -38,6 +96,7 @@ fn prompt(items: Vec<Value>, tools: Vec<Value>) -> Prompt {
         tools,
         max_tokens: Some(128),
         reasoning: None,
+        image_budget: None,
     }
 }
 type Step = (&'static str, Vec<Value>);
@@ -114,6 +173,205 @@ fn run_capture(fake: &Fake, input: Prompt) -> (std::io::Result<()>, Vec<Output>)
         Ok(())
     });
     (result, out)
+}
+
+const PNG: &str =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+fn image_part() -> Value {
+    json!({"type":"input_image","image_url":format!("data:image/png;base64,{PNG}")})
+}
+fn visual_user() -> Value {
+    json!({"type":"message","role":"user","content":[{"type":"input_text","text":"Look"},image_part(),{"type":"input_text","text":" closely"}]})
+}
+fn assistant(outputs: &[Output]) -> Value {
+    outputs
+        .iter()
+        .find_map(|output| match output {
+            Output::ItemDone(item) => Some(item.clone()),
+            _ => None,
+        })
+        .unwrap()
+}
+fn visual_initial(events: Vec<Value>) -> Vec<Step> {
+    let mut steps = initial(events);
+    steps[0] = ("describe", vec![vision_describe()]);
+    steps
+}
+fn visual_continue(
+    op: &'static str,
+    marker: u64,
+    pending: Vec<u64>,
+    events: Vec<Value>,
+) -> Vec<Step> {
+    vec![
+        ("describe", vec![vision_describe()]),
+        (
+            "open",
+            vec![json!({"ok":true,"marker":marker,"pending":pending})],
+        ),
+        (op, vec![json!({"ok":true})]),
+        ("generate", events),
+    ]
+}
+fn answer(marker: u64) -> Vec<Value> {
+    vec![
+        json!({"event":"start"}),
+        json!({"event":"text_delta","text":"seen"}),
+        done("stop", marker),
+    ]
+}
+
+#[test]
+fn visual_resume_reuses_prefix_and_budget_change_rebuilds_retained_bytes() {
+    let mut fake = Fake::new(vec![
+        visual_initial(answer(10)),
+        visual_continue("append", 10, vec![], answer(12)),
+        visual_continue("rebuild", 12, vec![], answer(14)),
+        visual_continue("rebuild", 14, vec![], answer(16)),
+    ]);
+    let mut items = vec![visual_user()];
+    let (result, first) = run_capture(&fake, prompt(items.clone(), vec![]));
+    result.unwrap();
+    assert!(
+        first
+            .iter()
+            .any(|o| matches!(o, Output::Local(v) if v["kind"] == "preparing_image"))
+    );
+    items.extend([assistant(&first), user("recall")]);
+    let (result, second) = run_capture(&fake, prompt(items.clone(), vec![]));
+    result.unwrap();
+    assert!(
+        !second
+            .iter()
+            .any(|o| matches!(o, Output::Local(v) if v["kind"] == "preparing_image"))
+    );
+    items.extend([assistant(&second), user("more detail")]);
+    let mut input = prompt(items, vec![]);
+    input.image_budget = Some(140);
+    run_capture(&fake, input).0.unwrap();
+    // Codex replaces compacted active context with its summary; old media remain in its rollout.
+    run_capture(
+        &fake,
+        prompt(vec![user("Summary of the image: seen")], vec![]),
+    )
+    .0
+    .unwrap();
+    let requests = fake.finish();
+    let rebuilds: Vec<_> = requests.iter().filter(|r| r["op"] == "rebuild").collect();
+    assert_eq!(rebuilds.len(), 3);
+    assert_eq!(rebuilds[0]["messages"][0]["text"], "Look closely");
+    for (index, budget) in [(0, 280), (1, 140)] {
+        assert_eq!(
+            rebuilds[index]["messages"][0]["image"],
+            json!({"data":PNG,"budget":budget})
+        );
+    }
+    assert!(rebuilds[2]["messages"][0].get("image").is_none());
+    let binding: Value =
+        serde_json::from_slice(&fs::read(fake.state().join("thread-1.json")).unwrap()).unwrap();
+    assert!(binding.get("image_budget").is_none());
+}
+
+#[test]
+fn view_image_tool_result_appends_native_bytes_and_new_thread_rebuilds_them() {
+    let tools = vec![
+        json!({"type":"function","name":"view_image","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}),
+    ];
+    let mut fake = Fake::new(vec![
+        visual_initial(vec![
+            json!({"event":"start"}),
+            json!({"event":"toolcall_start","id":7,"name":"view_image"}),
+            json!({"event":"toolcall_end","id":7,"name":"view_image","arguments":{"path":"/image.png"}}),
+            done("tool_use", 10),
+        ]),
+        visual_continue("append", 10, vec![7], answer(12)),
+        visual_initial(answer(14)),
+    ]);
+    let mut items = vec![user("Use view_image")];
+    let (result, first) = run_capture(&fake, prompt(items.clone(), tools.clone()));
+    result.unwrap();
+    let call = assistant(&first);
+    items.push(call.clone());
+    items.push(json!({"type":"function_call_output","call_id":call["call_id"],"output":[{"type":"input_text","text":"image attached"},image_part()]}));
+    run_capture(&fake, prompt(items.clone(), tools.clone()))
+        .0
+        .unwrap();
+    run(
+        &fake.socket,
+        &fake.state(),
+        "fork-thread",
+        prompt(items, tools),
+        |_| Ok(()),
+    )
+    .unwrap();
+    let requests = fake.finish();
+    let append = requests.iter().find(|r| r["op"] == "append").unwrap();
+    assert_eq!(append["call_id"], 7);
+    assert_eq!(append["image"], json!({"data":PNG,"budget":280}));
+    let rebuilt = requests
+        .iter()
+        .rev()
+        .find(|r| r["op"] == "rebuild")
+        .unwrap();
+    assert_eq!(rebuilt["messages"][2]["image"], append["image"]);
+}
+
+#[test]
+fn invalid_images_are_rejected_before_connecting() {
+    let mut cases = Vec::new();
+    let mut multiple = visual_user();
+    multiple["content"]
+        .as_array_mut()
+        .unwrap()
+        .push(image_part());
+    cases.push(multiple);
+    for url in [
+        "https://example.com/image.png",
+        "data:image/png;base64,????",
+        "data:image/jpeg;base64,aGVsbG8=",
+        "data:image/jpeg;base64,iVBORw0KGgo=",
+    ] {
+        cases.push(json!({"type":"message","role":"user","content":[{"type":"input_image","image_url":url}]}));
+    }
+    let fake = Fake::new(vec![]);
+    for item in cases {
+        let error = run_capture(&fake, prompt(vec![item], vec![]))
+            .0
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+    assert!(!fake.state().join("thread-1.json").exists());
+}
+
+#[test]
+fn image_capabilities_and_context_byte_limits_fail_before_session_mutation() {
+    for (mut info, max_bytes) in [
+        (describe(), 100),
+        (vision_describe(), 100),
+        (vision_describe(), 32),
+    ] {
+        if info["vision"].is_object() {
+            info["vision"]["max_bytes"] = json!(max_bytes);
+            info["vision"]["max_context_media_bytes"] = json!(100);
+        }
+        let mut fake = Fake::new(vec![vec![("describe", vec![info])]]);
+        run_capture(&fake, prompt(vec![visual_user(), visual_user()], vec![]))
+            .0
+            .unwrap_err();
+        assert!(!fake.state().join("thread-1.json").exists());
+        assert_eq!(fake.finish().len(), 1);
+    }
+    let mut fake = Fake::new(vec![vec![("describe", vec![vision_describe()])]]);
+    let mut input = prompt(vec![visual_user()], vec![]);
+    input.image_budget = Some(71);
+    assert!(
+        run_capture(&fake, input)
+            .0
+            .unwrap_err()
+            .to_string()
+            .contains("budget")
+    );
+    assert_eq!(fake.finish().len(), 1);
 }
 
 #[test]
@@ -406,6 +664,51 @@ fn refuses_diverged_native_marker_without_mutation() {
     assert!(result.unwrap_err().to_string().contains("diverged"));
     let requests = fake.finish();
     assert_eq!(requests.iter().filter(|r| r["op"] == "generate").count(), 1);
+}
+
+#[test]
+fn cancelling_image_preparation_suppresses_generation_and_recovers_from_retained_bytes() {
+    use std::sync::{Arc, atomic::AtomicBool};
+    let mut fake = Fake::new(vec![
+        vec![
+            ("describe", vec![vision_describe()]),
+            ("create", vec![json!({"ok":true,"session":SESSION})]),
+            ("rebuild", vec![]),
+            ("cancel", vec![]),
+        ],
+        visual_continue("rebuild", 9, vec![], answer(10)),
+    ]);
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let flag = cancelled.clone();
+    let received = fake.received.take().unwrap();
+    let trigger = thread::spawn(move || {
+        while received.recv_timeout(Duration::from_secs(5)).unwrap()["op"] != "rebuild" {}
+        flag.store(true, Ordering::Release);
+    });
+    let result = codex_xenolith_wire::backend::run_cancellable(
+        &fake.socket,
+        &fake.state(),
+        "thread-1",
+        prompt(vec![visual_user()], vec![]),
+        cancelled,
+        |_| Ok(()),
+    );
+    trigger.join().unwrap();
+    assert!(result.is_err());
+    let record: Value =
+        serde_json::from_slice(&fs::read(fake.state().join("thread-1.json")).unwrap()).unwrap();
+    assert_eq!(record["in_flight"], true);
+    run_capture(&fake, prompt(vec![visual_user()], vec![]))
+        .0
+        .unwrap();
+    let requests = fake.finish();
+    assert_eq!(requests.iter().filter(|r| r["op"] == "generate").count(), 1);
+    let rebuilt = requests
+        .iter()
+        .rev()
+        .find(|r| r["op"] == "rebuild")
+        .unwrap();
+    assert_eq!(rebuilt["messages"][0]["image"]["data"], PNG);
 }
 
 #[test]

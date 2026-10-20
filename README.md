@@ -16,6 +16,7 @@ inference information into CodeXe's interface. It does not require an HTTP bridg
 - **Dedicated inference status** for engine startup, live prefill progress and
   measured generation speed, separate from conversation text.
 - **Service discovery** for the served model, context, output limit and reasoning capabilities.
+- **Vision** through existing image attachments and `view_image`, when Xenolith serves a projector.
 - **Native reasoning**, including streamed thoughts and history across tools and resume.
 - **Optional engine startup**, sharing Xenolith's weight-owner lock with other clients.
 - **Durable sessions and checkpoints**, with actual KV snapshot restoration reports.
@@ -75,7 +76,8 @@ An automatically started engine remains available until its idle shutdown.
 
 - Rewind uses an **offline controller**, with the CodeXe thread closed; an interactive picker is not implemented.
 - Text, reasoning, function/custom tools and one namespace level are supported.
-  Images/audio, hosted/deferred tools, nested namespaces and constrained JSON are rejected.
+  PNG/JPEG images are supported, one per user message or tool result. Audio,
+  hosted/deferred tools, nested namespaces and constrained JSON are rejected.
 - Output defaults to the service's advertised limit, with an optional lower client limit.
   Reaching that limit terminates the response without an automatic retry.
   Crash recovery conservatively rebuilds context;

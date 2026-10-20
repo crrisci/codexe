@@ -2,14 +2,15 @@
 
 Copyright (c) 2026 Francesco Pio Crisci. Licensed under Apache-2.0.
 
-CodeXe connects directly to Xenolith wire protocol v1 over a Unix socket.
+CodeXe connects directly to Xenolith wire protocol v1 (text) or v2 (vision) over a Unix socket.
 No HTTP adapter is required. CodeXe still owns the agent loop, shell tools, approvals
 and conversation history. Xenolith owns inference, native sessions and KV snapshots.
 
 Baseline: `rust-v0.162.1`, commit `092d3acd6bec3e3a14bdc7e7a2810ab628ab759d`.
 The native contract follows Xenolith main `88e8661d190985c50c638049dd2fec195a0fec63`
 and the client behavior is informed by XenoPi `e92a082b4070fd569bd26648fd374474d5d89cf6`.
-Current limitations are listed below.
+Vision follows the engine and client contracts introduced by Xenolith #10 and
+XenoPi #2. Current limitations are listed below.
 
 ## Build
 
@@ -136,6 +137,47 @@ Startup failures include the engine's log tail. An unrelated engine is never
 terminated. Engine state/cache variables are distinct from `XENOLITH_STATE_DIR`,
 which continues to hold CodeXe conversation bindings.
 
+### Images
+
+Use Codex's existing image attachment controls, `codex --image /path/image.png`,
+or ask the agent to open a local image with its `view_image` tool. Vision is
+advertised only when the connected engine reports valid v2 image capabilities.
+No new attachment syntax or tool is introduced.
+
+Configure the projector and optional image budget in `$CODEX_HOME/config.toml`:
+
+```toml
+[model_providers.xenolith]
+mmproj = "/absolute/path/to/mmproj-F16.gguf"
+image_budget = 280
+```
+
+`XENOLITH_MMPROJ` and `XENOLITH_IMAGE_BUDGET` override these settings. The projector
+is passed as `--mmproj` only when CodeXe starts an engine; an existing service
+remains authoritative. Restart the engine to enable a projector. Omit the image
+budget to use the service default. Current budgets are 70, 140, 280, 560 and 1120;
+vision requires a 65536 or 131072 engine context. A changed budget rebuilds the
+affected visual history on the next request.
+
+The adapter accepts inline PNG/JPEG bytes, with one image per user message or
+tool result. Send additional images in separate turns. Text blocks retain their
+order as the image caption. Multiple images, remote URLs, file IDs, unsupported
+formats and oversized requests fail explicitly; no images are silently removed.
+Codex retains its usual image preparation, resizing and permission checks.
+
+Codex history retains the image bytes, so resume, fork and reconstruction do not
+need the original file. Existing local compaction receives actual images and
+replaces active context with its summary. The native binding records the image
+budget; conservative replay after an interrupted operation also restores images.
+The adapter sends inline bytes when needed and otherwise reuses its existing
+incremental session path; it adds no separate media archive or download service.
+
+The native status area shows `Preparing image` and elapsed time while Xenolith
+prepares an image. This is not token progress or an encoder percentage. Escape
+cancels the client operation and prevents generation; synchronous engine encoding
+may still finish before the engine can process cancellation/disconnection. The
+next request rebuilds uncertain native history from Codex's retained transcript.
+
 ### Reasoning and output
 
 Set `model_reasoning_effort` to a service-supported level (`low`, `medium`,
@@ -226,7 +268,8 @@ and a separate probe that verifies actual KV snapshot loading, see
 
 ## Unsupported in this milestone
 
-Media, hosted/deferred tools, nested namespaces and constrained JSON are rejected.
+Audio, multiple images per message, hosted/deferred tools, nested namespaces and
+constrained JSON are rejected.
 Function/custom tools with one namespace are supported. Native temporary requests are not
 exposed. Crash recovery conservatively rebuilds KV and cannot guarantee uncommitted
 streamed output. Automatic context saturation and GGUF incompatibility remain untested.

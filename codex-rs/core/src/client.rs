@@ -2257,7 +2257,7 @@ impl ModelClientSession {
                         prompt,
                         model_info,
                         self.client.state.thread_id.to_string(),
-                        self.client.state.provider.info().base_url.as_deref(),
+                        self.client.state.provider.info(),
                         effort,
                     )
                 }

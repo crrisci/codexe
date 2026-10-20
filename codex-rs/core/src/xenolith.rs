@@ -20,7 +20,7 @@ pub(crate) fn stream(
     prompt: &Prompt,
     model: &ModelInfo,
     thread: String,
-    base_url: Option<&str>,
+    provider: &codex_model_provider_info::ModelProviderInfo,
     effort: Option<ReasoningEffort>,
 ) -> Result<ResponseStream> {
     if prompt.output_schema.is_some() {
@@ -31,7 +31,9 @@ pub(crate) fn stream(
     }
     let generation = config::GenerationSettings::from_env(effort.as_ref())
         .map_err(|error| CodexErrorDetails::InvalidRequest(error.to_string()))?;
-    let socket = base_url
+    let socket = provider
+        .base_url
+        .as_deref()
         .and_then(|url| url.strip_prefix("unix://"))
         .filter(|path| path.starts_with('/'))
         .ok_or_else(|| {
@@ -72,6 +74,8 @@ pub(crate) fn stream(
         max_tokens: generation.max_tokens,
         context_window: model.max_context_window.map(|value| value as u64),
         reasoning: generation.reasoning,
+        image_budget: config::image_budget(provider)
+            .map_err(|error| CodexErrorDetails::InvalidRequest(error.to_string()))?,
     };
     let (tx, rx_event) = mpsc::channel(128);
     let consumer_dropped = CancellationToken::new();
