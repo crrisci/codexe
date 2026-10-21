@@ -48,8 +48,11 @@ const STARTUP_PASTE_NEWLINE_TIMEOUT: Duration = Duration::from_millis(120);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum NativeStartupPhase {
+    #[cfg(unix)]
     Connecting,
+    #[cfg(any(unix, test))]
     Starting,
+    #[cfg(unix)]
     Waiting,
     Ready,
 }
@@ -57,8 +60,11 @@ pub(crate) enum NativeStartupPhase {
 impl NativeStartupPhase {
     fn label(self) -> &'static str {
         match self {
+            #[cfg(unix)]
             Self::Connecting => "Connecting to Xenolith",
+            #[cfg(any(unix, test))]
             Self::Starting => "Starting Xenolith",
+            #[cfg(unix)]
             Self::Waiting => "Waiting for Xenolith",
             Self::Ready => "Xenolith ready",
         }

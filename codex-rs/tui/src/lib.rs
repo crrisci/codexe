@@ -2195,6 +2195,10 @@ async fn load_config_or_exit(
     .await
 }
 
+#[expect(
+    clippy::print_stderr,
+    reason = "The terminal has been restored before reporting a fatal startup error."
+)]
 async fn load_config_or_exit_with_native_status(
     cli_kv_overrides: Vec<(String, toml::Value)>,
     overrides: ConfigOverrides,
