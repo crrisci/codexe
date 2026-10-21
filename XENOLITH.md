@@ -188,10 +188,10 @@ Use `show_raw_agent_reasoning = true` to display the native reasoning channel
 in interfaces that hide raw reasoning by default. It is stored separately from
 assistant text and is not presented as a provider-generated summary.
 
-| Variable | Contract |
-|---|---|
-| `XENOLITH_MAX_OUTPUT_TOKENS` | Optional positive output limit, no greater than `describe.max_output`. Omit to use the service limit; there is no fixed 4096-token cap. |
-| `XENOLITH_REASONING_BUDGET` | Optional nonnegative signed-32-bit reasoning token budget; requires enabled reasoning and advertised budget support. Reasoning shares the output budget. |
+| Variable                     | Contract                                                                                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `XENOLITH_MAX_OUTPUT_TOKENS` | Optional positive output limit, no greater than `describe.max_output`. Omit to use the service limit; there is no fixed 4096-token cap.                             |
+| `XENOLITH_REASONING_BUDGET`  | Optional nonnegative signed-32-bit reasoning token budget; requires enabled reasoning and advertised budget support. Reasoning shares the output budget.            |
 | `XENOLITH_REASONING_HISTORY` | `discard` (default) or `preserve_tool_calls`, validated against advertised capabilities. This controls engine context projection, not deletion from CodeXe history. |
 
 As specified by Xenolith, omitting a reasoning budget at unchanged effort retains
