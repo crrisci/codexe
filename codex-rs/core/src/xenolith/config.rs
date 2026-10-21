@@ -184,16 +184,15 @@ pub async fn configure_with_status(
     .await
     .map_err(io::Error::other)??;
     generation.validate(&info)?;
-    if let Some(budget) = image_budget {
-        if info
+    if let Some(budget) = image_budget
+        && info
             .vision
             .as_ref()
             .is_none_or(|vision| !vision.budgets.contains(&budget))
-        {
-            return Err(invalid(
-                "image_budget requires a vision service advertising that budget",
-            ));
-        }
+    {
+        return Err(invalid(
+            "image_budget requires a vision service advertising that budget",
+        ));
     }
     if requested_context.is_some_and(|requested| requested != info.context_window) {
         config.startup_warnings.push(format!(

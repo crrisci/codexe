@@ -33,6 +33,30 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
             "GITHUB_REPOSITORY": repository,
         }
 
+    def test_windows_voice_inputs_preserve_paths_and_test_arguments(self) -> None:
+        env = {
+            "VOICE_WINDOWS_BAZEL_REPOSITORY": "D:/build tools/voice",
+            "VOICE_WINDOWS_SYSTEM_ROOT": "C:/Windows",
+            "VOICE_WINDOWS_HOST_ARCH": "AMD64",
+        }
+        args = ["test", "--", "//codex-rs/voice-host:all"]
+        result = run_bazel_with_buildbuddy.bazel_args_with_remote_config(args, env)
+        separator = result.index("--")
+        self.assertIn("--inject_repository=voice_windows_tools=D:/build tools/voice", result[:separator])
+        self.assertIn("--action_env=SystemRoot=C:/Windows", result[:separator])
+        self.assertIn("--host_action_env=PROCESSOR_ARCHITECTURE=AMD64", result[:separator])
+        self.assertEqual(result[separator:], args[1:])
+        self.assertEqual(
+            run_bazel_with_buildbuddy.bazel_args_with_remote_config(["mod", "deps"], env),
+            ["mod", "deps"],
+        )
+
+    def test_incomplete_windows_voice_environment_fails_explicitly(self) -> None:
+        with self.assertRaisesRegex(ValueError, "SystemRoot"):
+            run_bazel_with_buildbuddy.bazel_args_with_remote_config(
+                ["build", "//..."], {"VOICE_WINDOWS_BAZEL_REPOSITORY": "D:/tools"}
+            )
+
     def test_keyless_invocation_drops_remote_ci_configuration(self) -> None:
         self.assertIsNone(
             run_bazel_with_buildbuddy.remote_config(

@@ -270,8 +270,7 @@ jobs:
         if: ${{ env.USE_SCCACHE == 'true' }}
         uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
-          tool: sccache
-          version: 0.7.5
+          tool: sccache@0.12.0
 
       - name: Configure sccache backend
         if: ${{ env.USE_SCCACHE == 'true' }}
@@ -345,8 +344,7 @@ jobs:
         if: ${{ matrix.profile == 'release' }}
         uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
         with:
-          tool: cargo-chef
-          version: 0.1.71
+          tool: cargo-chef@0.1.71
 
       - name: Pre-warm dependency cache (cargo-chef)
         if: ${{ matrix.profile == 'release' }}
@@ -355,10 +353,12 @@ jobs:
           set -euo pipefail
           RECIPE="${RUNNER_TEMP}/chef-recipe.json"
           cargo chef prepare --recipe-path "$RECIPE"
-          cargo chef cook --recipe-path "$RECIPE" --target ${{ matrix.target }} --release
+          cargo chef cook --package codex-cli --recipe-path "$RECIPE" --target ${{ matrix.target }} --release
 
+      # The voice helper requires the pinned native SDK and is built/tested by
+      # Bazel, including its runtime closure, in blocking-ci.
       - name: cargo clippy
-        run: cargo clippy --target ${{ matrix.target }} --tests --profile ${{ matrix.profile }} --timings -- -D warnings
+        run: cargo clippy --workspace --exclude codex-voice-host --target ${{ matrix.target }} --tests --profile ${{ matrix.profile }} --timings -- -D warnings
 
       - name: Upload Cargo timings (clippy)
         if: always()

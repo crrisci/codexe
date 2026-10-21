@@ -128,6 +128,26 @@ def bazel_args_without_remote_execution(args: Sequence[str]) -> list[str]:
     ]
 
 
+def windows_voice_args(args: Sequence[str], env: Mapping[str, str]) -> list[str]:
+    """Declare provisioned native Windows inputs only for build-like commands."""
+    command = next((arg for arg in args if not arg.startswith("-")), None)
+    repository = env.get("VOICE_WINDOWS_BAZEL_REPOSITORY")
+    system_root = env.get("VOICE_WINDOWS_SYSTEM_ROOT")
+    architecture = env.get("VOICE_WINDOWS_HOST_ARCH")
+    if command not in {"build", "test", "run", "coverage", "aquery", "cquery"} or not repository:
+        return []
+    if not system_root or not architecture:
+        raise ValueError("provisioned Windows voice tools require SystemRoot and host architecture")
+    return [
+        f"--inject_repository=voice_windows_tools={repository}",
+        "--//third_party/voice:windows_installed_tools=@voice_windows_tools//:tools",
+        f"--action_env=SystemRoot={system_root}",
+        f"--host_action_env=SystemRoot={system_root}",
+        f"--action_env=PROCESSOR_ARCHITECTURE={architecture}",
+        f"--host_action_env=PROCESSOR_ARCHITECTURE={architecture}",
+    ]
+
+
 def bazel_args_with_remote_config(
     args: Sequence[str], env: Mapping[str, str]
 ) -> list[str]:
@@ -177,6 +197,7 @@ def bazel_args_with_remote_config(
     return [
         *configured_args[:separator_idx],
         *cache_args,
+        *windows_voice_args(args, env),
         *configured_args[separator_idx:],
     ]
 
