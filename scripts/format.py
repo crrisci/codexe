@@ -41,11 +41,53 @@ def just_formatter_group(*, check: bool) -> FormatterGroup:
 
 
 def rust_formatter_group(*, check: bool) -> FormatterGroup:
-    args = ["cargo", "fmt", "--", "--config", "imports_granularity=Item"]
+    rust_root = REPO_ROOT / "codex-rs"
+    repository_files = subprocess.check_output(
+        [
+            "git",
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "*.rs",
+        ],
+        cwd=REPO_ROOT,
+    ).split(b"\0")
+    rust_files = sorted(
+        {
+            os.path.relpath(REPO_ROOT / os.fsdecode(path), rust_root)
+            for path in repository_files
+            if path and (REPO_ROOT / os.fsdecode(path)).is_file()
+        }
+    )
+    args = [
+        "rustfmt",
+        "--edition",
+        "2024",
+        "--config-path",
+        str(rust_root / "rustfmt.toml"),
+        "--config",
+        "imports_granularity=Item,skip_children=true",
+    ]
     if check:
         args.append("--check")
-    command = Command(tuple(args), REPO_ROOT / "codex-rs")
-    return FormatterGroup("Rust", (command,))
+    # Keep argument lists below platform limits, including when paths contain spaces.
+    commands = []
+    batch = []
+    batch_bytes = 0
+    for path in rust_files:
+        path_bytes = len(os.fsencode(path)) + 1
+        if batch and batch_bytes + path_bytes > 64 * 1024:
+            commands.append(Command((*args, *batch), rust_root))
+            batch = []
+            batch_bytes = 0
+        batch.append(path)
+        batch_bytes += path_bytes
+    if batch:
+        commands.append(Command((*args, *batch), rust_root))
+    return FormatterGroup("Rust", tuple(commands))
 
 
 def buildifier_formatter_group(*, check: bool) -> FormatterGroup:
