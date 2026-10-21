@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn sends_describe_without_http() {
-        let (mut client, server) = pair(64);
+        let (mut client, server) = pair(/*limit*/ 64);
         client.send_frame(br#"{"op":"describe"}"#).unwrap();
         let mut frame = String::new();
         BufReader::new(server).read_line(&mut frame).unwrap();
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn preserves_multiple_frames() {
-        let (mut client, mut server) = pair(64);
+        let (mut client, mut server) = pair(/*limit*/ 64);
         server
             .write_all(b"{\"event\":\"start\"}\n{\"event\":\"done\"}\n")
             .unwrap();
@@ -223,14 +223,14 @@ mod tests {
 
     #[test]
     fn accepts_exact_byte_limit() {
-        let (mut client, mut server) = pair(2);
+        let (mut client, mut server) = pair(/*limit*/ 2);
         server.write_all(b"{}\n").unwrap();
         assert_eq!(client.receive_frame().unwrap(), "{}");
     }
 
     #[test]
     fn rejects_oversized_input_and_poisoned_reuse() {
-        let (mut client, mut server) = pair(2);
+        let (mut client, mut server) = pair(/*limit*/ 2);
         server.write_all(b"xxx\n{}\n").unwrap();
         assert_eq!(
             client.receive_frame().unwrap_err().kind(),
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn eof_does_not_complete_generation() {
-        let (mut client, mut server) = pair(64);
+        let (mut client, mut server) = pair(/*limit*/ 64);
         server.write_all(b"{}").unwrap();
         server.shutdown(Shutdown::Write).unwrap();
         assert_eq!(
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn rejects_empty_and_invalid_utf8_frames() {
         for bytes in [b"\n".as_slice(), b"\xff\n".as_slice()] {
-            let (mut client, mut server) = pair(64);
+            let (mut client, mut server) = pair(/*limit*/ 64);
             server.write_all(bytes).unwrap();
             assert_eq!(
                 client.receive_frame().unwrap_err().kind(),
@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn refuses_outgoing_frame_injection() {
-        let (mut client, _server) = pair(64);
+        let (mut client, _server) = pair(/*limit*/ 64);
         assert_eq!(
             client.send_frame(b"{}\n{}").unwrap_err().kind(),
             io::ErrorKind::InvalidInput
@@ -279,7 +279,8 @@ mod tests {
     fn stalled_peer_times_out_and_poisoned_reuse_fails() {
         let (client, _server) = UnixStream::pair().unwrap();
         let mut client =
-            WireConnection::from_stream(client, 64, Duration::from_millis(20)).unwrap();
+            WireConnection::from_stream(client, /*max_frame*/ 64, Duration::from_millis(20))
+                .unwrap();
         assert!(matches!(
             client.receive_frame().unwrap_err().kind(),
             io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut

@@ -625,7 +625,8 @@ while True:
                 ("XENOLITH_MODEL", model.into_os_string()),
             ]);
             let mut settings =
-                ServiceSettings::from_lookup(None, |key| env.get(key).cloned()).unwrap();
+                ServiceSettings::from_lookup(/*base_url*/ None, |key| env.get(key).cloned())
+                    .unwrap();
             settings.startup_timeout = Duration::from_secs(3);
             settings.request_timeout = Duration::from_millis(200);
             Self { root, settings }
@@ -649,7 +650,7 @@ while True:
     #[test]
     fn projector_config_and_environment_precedence() {
         let lookup = |key: &str| (key == "HOME").then(|| OsString::from("/home/test"));
-        let settings = ServiceSettings::from_lookup(None, lookup)
+        let settings = ServiceSettings::from_lookup(/*base_url*/ None, lookup)
             .unwrap()
             .with_mmproj(Some(Path::new("/models/config.gguf")))
             .unwrap();
@@ -658,12 +659,12 @@ while True:
             Some(Path::new("/models/config.gguf"))
         );
         assert!(
-            ServiceSettings::from_lookup(None, lookup)
+            ServiceSettings::from_lookup(/*base_url*/ None, lookup)
                 .unwrap()
                 .with_mmproj(Some(Path::new("relative.gguf")))
                 .is_err()
         );
-        let settings = ServiceSettings::from_lookup(None, |key| match key {
+        let settings = ServiceSettings::from_lookup(/*base_url*/ None, |key| match key {
             "XENOLITH_MMPROJ" => Some("/models/env.gguf".into()),
             _ => lookup(key),
         })
@@ -702,7 +703,9 @@ while True:
         assert_eq!(settings.context, Some(32768));
         assert_eq!(settings.cache_budget, Some(4 * 1024 * 1024 * 1024));
         assert_eq!(
-            ServiceSettings::from_lookup(None, lookup).unwrap().socket,
+            ServiceSettings::from_lookup(/*base_url*/ None, lookup)
+                .unwrap()
+                .socket,
             Path::new("/environment.sock")
         );
         let env = HashMap::from([
@@ -710,8 +713,11 @@ while True:
             ("XDG_STATE_HOME", "relative"),
             ("XDG_RUNTIME_DIR", "relative"),
         ]);
-        let settings =
-            ServiceSettings::from_lookup(None, |key| env.get(key).map(OsString::from)).unwrap();
+        let settings = ServiceSettings::from_lookup(
+            /*base_url*/ None,
+            |key| env.get(key).map(OsString::from),
+        )
+        .unwrap();
         assert_eq!(
             settings.socket,
             Path::new("/home/test/.local/state/xenolith/wire.sock")
@@ -735,7 +741,11 @@ while True:
         ] {
             let env = HashMap::from([("HOME", "/home/test"), (key, value)]);
             assert!(
-                ServiceSettings::from_lookup(None, |key| env.get(key).map(OsString::from)).is_err(),
+                ServiceSettings::from_lookup(
+                    /*base_url*/ None,
+                    |key| env.get(key).map(OsString::from)
+                )
+                .is_err(),
                 "{key}={value}"
             );
         }
@@ -755,7 +765,7 @@ while True:
             "XENOLITH_SOCKET" => Some(OsString::from_vec(b"/tmp/wire-\xff.sock".to_vec())),
             _ => None,
         };
-        let error = ServiceSettings::from_lookup(None, lookup).unwrap_err();
+        let error = ServiceSettings::from_lookup(/*base_url*/ None, lookup).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert!(
             error

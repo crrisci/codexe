@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn builtin_xenolith_needs_no_endpoint_or_auth_configuration() {
-        let providers = built_in_model_providers(None);
+        let providers = built_in_model_providers(/*openai_base_url*/ None);
         let native = &providers[XENOLITH_PROVIDER_ID];
         assert_eq!(native.name, "Xenolith");
         assert_eq!(native.wire_api, WireApi::Xenolith);
@@ -70,7 +70,7 @@ mod tests {
         let configured: ModelProviderInfo =
             toml::from_str("base_url = 'unix:///tmp/private-xenolith.sock'\nmmproj = '/models/mmproj.gguf'\nimage_budget = 140").unwrap();
         let providers = merge_configured_model_providers(
-            built_in_model_providers(None),
+            built_in_model_providers(/*openai_base_url*/ None),
             HashMap::from([(XENOLITH_PROVIDER_ID.to_owned(), configured)]),
         )
         .unwrap();

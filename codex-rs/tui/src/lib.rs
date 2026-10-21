@@ -2209,8 +2209,8 @@ async fn load_config_or_exit_with_native_status(
         loader_overrides,
         cloud_config_bundle,
         strict_config,
-        None,
-        None,
+        /*fallback_cwd*/ None,
+        /*worktree*/ None,
         Some(native_status),
     )
     .await
@@ -2276,7 +2276,7 @@ async fn load_config_with_worktree_source_policy(
         strict_config,
         fallback_cwd,
         worktree,
-        None,
+        /*native_status*/ None,
     )
     .await
 }

@@ -144,6 +144,7 @@ def windows_voice_args(args: Sequence[str], env: Mapping[str, str]) -> list[str]
             "provisioned Windows voice tools require SystemRoot and host architecture"
         )
     return [
+        "--workspace_status_command=./scripts/workspace-status.cmd",
         f"--inject_repository=voice_windows_tools={repository}",
         "--//third_party/voice:windows_installed_tools=@voice_windows_tools//:tools",
         f"--action_env=SystemRoot={system_root}",

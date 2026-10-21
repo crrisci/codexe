@@ -206,7 +206,11 @@ impl ChatWidget {
                 self.on_hook_completed(notification.run);
             }
             ServerNotification::Error(notification) => {
-                self.finish_native_inference(&notification.thread_id, &notification.turn_id, false);
+                self.finish_native_inference(
+                    &notification.thread_id,
+                    &notification.turn_id,
+                    /*success*/ false,
+                );
                 if notification.will_retry {
                     if !from_replay {
                         self.on_stream_error(

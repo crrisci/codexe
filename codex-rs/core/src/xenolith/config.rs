@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn output_defaults_to_service_and_effort_aliases_match_pi() {
-        let default = settings(None, &[]).unwrap();
+        let default = settings(/*effort*/ None, &[]).unwrap();
         assert_eq!(default.max_tokens, None);
         assert!(default.reasoning.is_none());
         for (effort, expected) in [
@@ -359,7 +359,7 @@ mod tests {
             vec![("XENOLITH_REASONING_HISTORY", "everything")],
             vec![("XENOLITH_MAX_OUTPUT_TOKENS", "2147483648")],
         ] {
-            assert!(settings(None, &env).is_err());
+            assert!(settings(/*effort*/ None, &env).is_err());
         }
         assert!(settings(Some(&ReasoningEffort::Ultra), &[]).is_err());
         assert_eq!(

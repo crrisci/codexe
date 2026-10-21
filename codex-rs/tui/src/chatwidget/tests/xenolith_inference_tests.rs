@@ -15,24 +15,33 @@ fn native(thread: ThreadId, turn: &str, phase: &str, details: &str) -> ServerNot
 
 #[tokio::test]
 async fn native_image_preparation_shows_elapsed_time_until_prefill_or_cancel() {
-    let (mut chat, mut events, _ops) = make_chatwidget_manual(None).await;
+    let (mut chat, mut events, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
     let thread = ThreadId::new();
     chat.thread_id = Some(thread);
     handle_turn_started(&mut chat, "turn-1");
-    chat.handle_server_notification(native(thread, "turn-1", "preparing_image", ""), None);
+    chat.handle_server_notification(
+        native(thread, "turn-1", "preparing_image", ""),
+        /*replay_kind*/ None,
+    );
     let later = std::time::Instant::now() + std::time::Duration::from_secs(2);
     chat.refresh_native_image_time_at(later);
-    let rendered = render_bottom_popup(&chat, 80);
+    let rendered = render_bottom_popup(&chat, /*width*/ 80);
     assert!(rendered.contains("Preparing image · 2s"), "{rendered}");
     assert!(!rendered.contains("tok/s"));
     assert!(!history_text(&mut events).contains("Preparing image"));
-    chat.handle_server_notification(native(thread, "turn-1", "prefill", "10/20 tokens"), None);
+    chat.handle_server_notification(
+        native(thread, "turn-1", "prefill", "10/20 tokens"),
+        /*replay_kind*/ None,
+    );
     chat.refresh_native_image_time_at(later);
-    assert!(!render_bottom_popup(&chat, 80).contains("Preparing image"));
-    chat.handle_server_notification(native(thread, "turn-1", "preparing_image", ""), None);
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("Preparing image"));
+    chat.handle_server_notification(
+        native(thread, "turn-1", "preparing_image", ""),
+        /*replay_kind*/ None,
+    );
     handle_turn_interrupted(&mut chat, "turn-1");
     chat.refresh_native_image_time_at(later);
-    assert!(!render_bottom_popup(&chat, 80).contains("Preparing image"));
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("Preparing image"));
 }
 
 fn history_text(events: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> String {
@@ -46,23 +55,23 @@ fn history_text(events: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> 
 
 #[tokio::test]
 async fn native_decode_remains_visible_during_stream_commits_and_reasoning_updates() {
-    let (mut chat, mut events, _ops) = make_chatwidget_manual(None).await;
+    let (mut chat, mut events, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
     let thread = ThreadId::new();
     chat.thread_id = Some(thread);
     handle_turn_started(&mut chat, "turn-1");
     chat.handle_server_notification(
         native(thread, "turn-1", "decode", "NATIVE_LIVE_23_TOKENS"),
-        None,
+        /*replay_kind*/ None,
     );
-    assert!(render_bottom_popup(&chat, 80).contains("NATIVE_LIVE_23_TOKENS"));
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("NATIVE_LIVE_23_TOKENS"));
 
     handle_agent_message_delta(&mut chat, "A streamed paragraph.\n\n");
     for _ in 0..10 {
         chat.run_commit_tick();
     }
-    assert!(render_bottom_popup(&chat, 80).contains("NATIVE_LIVE_23_TOKENS"));
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("NATIVE_LIVE_23_TOKENS"));
     handle_agent_reasoning_delta(&mut chat, "**Inspecting the file**");
-    let rendered = render_bottom_popup(&chat, 80);
+    let rendered = render_bottom_popup(&chat, /*width*/ 80);
     assert!(rendered.contains("Xenolith"), "{rendered}");
     assert!(rendered.contains("NATIVE_LIVE_23_TOKENS"), "{rendered}");
     assert!(!history_text(&mut events).contains("NATIVE_LIVE_23_TOKENS"));
@@ -70,24 +79,27 @@ async fn native_decode_remains_visible_during_stream_commits_and_reasoning_updat
 
 #[tokio::test]
 async fn native_panel_ignores_foreign_threads_stale_turns_and_replayed_telemetry() {
-    let (mut chat, mut events, _ops) = make_chatwidget_manual(None).await;
+    let (mut chat, mut events, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
     let thread = ThreadId::new();
     chat.thread_id = Some(thread);
     handle_turn_started(&mut chat, "turn-1");
     chat.handle_server_notification(
         native(thread, "turn-1", "prefill", "CURRENT_NATIVE_PROGRESS"),
-        None,
+        /*replay_kind*/ None,
     );
     chat.handle_server_notification(
         native(ThreadId::new(), "turn-1", "checkpoint", "FOREIGN_THREAD"),
-        None,
+        /*replay_kind*/ None,
     );
-    chat.handle_server_notification(native(thread, "old-turn", "checkpoint", "STALE_TURN"), None);
+    chat.handle_server_notification(
+        native(thread, "old-turn", "checkpoint", "STALE_TURN"),
+        /*replay_kind*/ None,
+    );
     chat.handle_server_notification(
         native(thread, "turn-1", "checkpoint", "REPLAYED_TELEMETRY"),
         Some(ReplayKind::ResumeInitialMessages),
     );
-    let rendered = render_bottom_popup(&chat, 80);
+    let rendered = render_bottom_popup(&chat, /*width*/ 80);
     assert!(rendered.contains("CURRENT_NATIVE_PROGRESS"), "{rendered}");
     for ignored in ["FOREIGN_THREAD", "STALE_TURN", "REPLAYED_TELEMETRY"] {
         assert!(!rendered.contains(ignored), "{rendered}");
@@ -102,25 +114,29 @@ async fn native_panel_ignores_foreign_threads_stale_turns_and_replayed_telemetry
 #[tokio::test]
 async fn native_live_progress_clears_on_cancel_error_and_turn_completion() {
     for ending in ["cancel", "error", "complete", "reset", "disconnect"] {
-        let (mut chat, _events, _ops) = make_chatwidget_manual(None).await;
+        let (mut chat, _events, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
         let thread = ThreadId::new();
         chat.thread_id = Some(thread);
         handle_turn_started(&mut chat, "turn-1");
         chat.handle_server_notification(
             native(thread, "turn-1", "decode", "EPHEMERAL_NATIVE_PROGRESS"),
-            None,
+            /*replay_kind*/ None,
         );
-        assert!(render_bottom_popup(&chat, 80).contains("EPHEMERAL_NATIVE_PROGRESS"));
+        assert!(render_bottom_popup(&chat, /*width*/ 80).contains("EPHEMERAL_NATIVE_PROGRESS"));
         match ending {
             "cancel" => handle_turn_interrupted(&mut chat, "turn-1"),
-            "error" => handle_error(&mut chat, "Native generation failed", None),
-            "complete" => handle_turn_completed(&mut chat, "turn-1", None),
-            "reset" => chat.reset_after_prompt_revert(None, &[]),
+            "error" => handle_error(
+                &mut chat,
+                "Native generation failed",
+                /*codex_error_info*/ None,
+            ),
+            "complete" => handle_turn_completed(&mut chat, "turn-1", /*duration_ms*/ None),
+            "reset" => chat.reset_after_prompt_revert(/*rollout_path*/ None, &[]),
             "disconnect" => chat.pause_for_disconnect(),
             _ => unreachable!(),
         }
         assert!(
-            !render_bottom_popup(&chat, 80).contains("EPHEMERAL_NATIVE_PROGRESS"),
+            !render_bottom_popup(&chat, /*width*/ 80).contains("EPHEMERAL_NATIVE_PROGRESS"),
             "{ending}"
         );
     }
@@ -128,7 +144,7 @@ async fn native_live_progress_clears_on_cancel_error_and_turn_completion() {
 
 #[tokio::test]
 async fn native_checkpoint_summary_is_transient_panel_content_never_answer_history() {
-    let (mut chat, mut events, _ops) = make_chatwidget_manual(None).await;
+    let (mut chat, mut events, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
     let thread = ThreadId::new();
     chat.thread_id = Some(thread);
     handle_turn_started(&mut chat, "turn-1");
@@ -136,11 +152,11 @@ async fn native_checkpoint_summary_is_transient_panel_content_never_answer_histo
     chat.run_commit_tick();
     chat.handle_server_notification(
         native(thread, "turn-1", "checkpoint", "NATIVE_SAVED_SUMMARY"),
-        None,
+        /*replay_kind*/ None,
     );
     chat.handle_server_notification(
         native(thread, "turn-1", "rewind", "NATIVE_REWIND_DETAIL"),
-        None,
+        /*replay_kind*/ None,
     );
     complete_assistant_message(
         &mut chat,
@@ -148,18 +164,18 @@ async fn native_checkpoint_summary_is_transient_panel_content_never_answer_histo
         "Only one assistant answer.",
         Some(MessagePhase::FinalAnswer),
     );
-    handle_turn_completed(&mut chat, "turn-1", None);
-    let rendered = render_bottom_popup(&chat, 80);
+    handle_turn_completed(&mut chat, "turn-1", /*duration_ms*/ None);
+    let rendered = render_bottom_popup(&chat, /*width*/ 80);
     assert!(rendered.contains("NATIVE_SAVED_SUMMARY"), "{rendered}");
     assert!(!rendered.contains("NATIVE_REWIND_DETAIL"), "{rendered}");
     let history = history_text(&mut events);
     assert!(!history.contains("NATIVE_SAVED_SUMMARY"), "{history}");
     assert!(!history.contains("NATIVE_REWIND_DETAIL"), "{history}");
     handle_turn_started(&mut chat, "turn-2");
-    assert!(!render_bottom_popup(&chat, 80).contains("NATIVE_SAVED_SUMMARY"));
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("NATIVE_SAVED_SUMMARY"));
     chat.handle_server_notification(
         native(thread, "turn-1", "checkpoint", "STALE_SUMMARY"),
-        None,
+        /*replay_kind*/ None,
     );
-    assert!(!render_bottom_popup(&chat, 80).contains("STALE_SUMMARY"));
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("STALE_SUMMARY"));
 }

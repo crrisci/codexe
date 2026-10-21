@@ -56,11 +56,13 @@ async fn xenolith_checkpoint_never_splits_or_duplicates_a_streamed_answer() -> R
                     app.config.cwd.to_path_buf(),
                 ));
             while events.try_recv().is_ok() {}
-            app.chat_widget
-                .handle_server_notification(turn_started_notification(thread, "native-turn"), None);
+            app.chat_widget.handle_server_notification(
+                turn_started_notification(thread, "native-turn"),
+                /*replay_kind*/ None,
+            );
             app.chat_widget.handle_server_notification(
                 agent_message_delta_notification(thread, "native-turn", "native-answer", PREFIX),
-                None,
+                /*replay_kind*/ None,
             );
             for _ in 0..10 {
                 app.chat_widget.on_commit_tick();
@@ -80,7 +82,7 @@ async fn xenolith_checkpoint_never_splits_or_duplicates_a_streamed_answer() -> R
                         "native-answer",
                         before,
                     ),
-                    None,
+                    /*replay_kind*/ None,
                 );
             }
             app.chat_widget.handle_server_notification(
@@ -92,12 +94,12 @@ async fn xenolith_checkpoint_never_splits_or_duplicates_a_streamed_answer() -> R
                         details: "NATIVE_TELEMETRY_ONLY".into(),
                     },
                 ),
-                None,
+                /*replay_kind*/ None,
             );
             if !after.is_empty() {
                 app.chat_widget.handle_server_notification(
                     agent_message_delta_notification(thread, "native-turn", "native-answer", after),
-                    None,
+                    /*replay_kind*/ None,
                 );
             }
             app.chat_widget.handle_server_notification(
@@ -116,11 +118,11 @@ async fn xenolith_checkpoint_never_splits_or_duplicates_a_streamed_answer() -> R
                         },
                     },
                 ),
-                None,
+                /*replay_kind*/ None,
             );
             app.chat_widget.handle_server_notification(
                 turn_completed_notification(thread, "native-turn", TurnStatus::Completed),
-                None,
+                /*replay_kind*/ None,
             );
             assert_eq!(
                 apply_native_history_events(&mut app, &mut tui, &mut events)?,

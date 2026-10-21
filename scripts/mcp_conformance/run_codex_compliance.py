@@ -177,7 +177,9 @@ class AppServerClient:
         self.events: list[dict[str, object]] = []
         self.elicitation_requests: list[dict[str, object]] = []
         self.process = subprocess.Popen(
-            [str(codex_binary), "app-server"],
+            # MCP protocol tests exercise the control plane without starting a
+            # local inference engine. Select the network provider explicitly.
+            [str(codex_binary), "-c", 'model_provider="openai"', "app-server"],
             cwd=cwd,
             env=dict(env),
             stdin=subprocess.PIPE,

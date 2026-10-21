@@ -163,6 +163,11 @@ jobs:
         with:
           tool: nextest@0.9.103
 
+      - name: Configure verified rusty_v8 artifacts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: ${{ inputs.target }}
+
       - name: Build nextest archive
         shell: bash
         run: |

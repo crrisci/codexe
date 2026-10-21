@@ -516,14 +516,17 @@ impl StartupDraftPump {
             // A protected onboarding/picker still owns input. Render only a
             // transient loader, without revealing or enabling the composer.
             let mut loading = FlexRenderable::new();
-            loading.push(0, RenderableItem::Borrowed(&self.header));
+            loading.push(/*flex*/ 0, RenderableItem::Borrowed(&self.header));
             loading.push(
-                0,
+                /*flex*/ 0,
                 RenderableItem::Owned(Box::new(
                     self.native_startup_line().unwrap_or_default().dim(),
                 )),
             );
-            loading.push(0, RenderableItem::Owned(Box::new("  Ctrl+C to exit".dim())));
+            loading.push(
+                /*flex*/ 0,
+                RenderableItem::Owned(Box::new("  Ctrl+C to exit".dim())),
+            );
             RenderableItem::Owned(Box::new(loading))
         } else if owned {
             RenderableItem::Borrowed(&owned_layout)
@@ -571,7 +574,12 @@ fn startup_draft_renderable<'a>(
     bottom_pane: &'a BottomPane,
     session_action: StartupDraftSessionAction,
 ) -> RenderableItem<'a> {
-    startup_draft_renderable_with_native_status(header, bottom_pane, session_action, None)
+    startup_draft_renderable_with_native_status(
+        header,
+        bottom_pane,
+        session_action,
+        /*native_status*/ None,
+    )
 }
 
 fn startup_draft_renderable_with_native_status<'a>(

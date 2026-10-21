@@ -43,6 +43,10 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
         result = run_bazel_with_buildbuddy.bazel_args_with_remote_config(args, env)
         separator = result.index("--")
         self.assertIn(
+            "--workspace_status_command=./scripts/workspace-status.cmd",
+            result[:separator],
+        )
+        self.assertIn(
             "--inject_repository=voice_windows_tools=D:/build tools/voice",
             result[:separator],
         )

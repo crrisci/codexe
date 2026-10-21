@@ -46,7 +46,12 @@ fn vision_describe() -> Value {
 #[test]
 fn discovers_vision_and_accepts_the_v2_frame_limit() {
     let mut fake = Fake::new(vec![vec![("describe", vec![vision_describe()])]]);
-    let mut wire = WireConnection::connect(&fake.socket, 4096, Duration::from_secs(5)).unwrap();
+    let mut wire = WireConnection::connect(
+        &fake.socket,
+        /*max_frame*/ 4096,
+        Duration::from_secs(5),
+    )
+    .unwrap();
     let info = Describe::discover(&mut wire).unwrap();
     assert_eq!(info.protocol, 2);
     let vision = info.vision.unwrap();
@@ -84,7 +89,12 @@ fn rejects_inconsistent_or_malformed_vision_capabilities() {
     cases.push(oversized);
     for info in cases {
         let mut fake = Fake::new(vec![vec![("describe", vec![info])]]);
-        let mut wire = WireConnection::connect(&fake.socket, 4096, Duration::from_secs(5)).unwrap();
+        let mut wire = WireConnection::connect(
+            &fake.socket,
+            /*max_frame*/ 4096,
+            Duration::from_secs(5),
+        )
+        .unwrap();
         assert!(Describe::discover(&mut wire).is_err());
         fake.finish();
     }
@@ -234,10 +244,10 @@ fn answer(marker: u64) -> Vec<Value> {
 #[test]
 fn visual_resume_reuses_prefix_and_budget_change_rebuilds_retained_bytes() {
     let mut fake = Fake::new(vec![
-        visual_initial(answer(10)),
-        visual_continue("append", 10, vec![], answer(12)),
-        visual_continue("rebuild", 12, vec![], answer(14)),
-        visual_continue("rebuild", 14, vec![], answer(16)),
+        visual_initial(answer(/*marker*/ 10)),
+        visual_continue("append", /*marker*/ 10, vec![], answer(/*marker*/ 12)),
+        visual_continue("rebuild", /*marker*/ 12, vec![], answer(/*marker*/ 14)),
+        visual_continue("rebuild", /*marker*/ 14, vec![], answer(/*marker*/ 16)),
     ]);
     let mut items = vec![visual_user()];
     let (result, first) = run_capture(&fake, prompt(items.clone(), vec![]));
@@ -292,10 +302,10 @@ fn view_image_tool_result_appends_native_bytes_and_new_thread_rebuilds_them() {
             json!({"event":"start"}),
             json!({"event":"toolcall_start","id":7,"name":"view_image"}),
             json!({"event":"toolcall_end","id":7,"name":"view_image","arguments":{"path":"/image.png"}}),
-            done("tool_use", 10),
+            done("tool_use", /*marker*/ 10),
         ]),
-        visual_continue("append", 10, vec![7], answer(12)),
-        visual_initial(answer(14)),
+        visual_continue("append", /*marker*/ 10, vec![7], answer(/*marker*/ 12)),
+        visual_initial(answer(/*marker*/ 14)),
     ]);
     let mut items = vec![user("Use view_image")];
     let (result, first) = run_capture(&fake, prompt(items.clone(), tools.clone()));
@@ -390,7 +400,7 @@ fn text_stream_commits_binding_and_reopens_snapshot() {
         initial(vec![
             json!({"event":"start"}),
             json!({"event":"text_delta","text":"ciao"}),
-            done("stop", 10),
+            done("stop", /*marker*/ 10),
         ]),
         vec![
             ("describe", vec![describe()]),
@@ -406,7 +416,7 @@ fn text_stream_commits_binding_and_reopens_snapshot() {
                 vec![
                     json!({"event":"start"}),
                     json!({"event":"text_delta","text":"again"}),
-                    done("stop", 12),
+                    done("stop", /*marker*/ 12),
                 ],
             ),
         ],
@@ -467,7 +477,7 @@ fn tool_result_uses_native_id_after_binding_reload() {
             json!({"event":"start"}),
             json!({"event":"toolcall_start","id":7,"name":"echo"}),
             json!({"event":"toolcall_end","id":7,"name":"echo","arguments":{"text":"hello"}}),
-            done("tool_use", 10),
+            done("tool_use", /*marker*/ 10),
         ]),
         vec![
             ("describe", vec![describe()]),
@@ -478,7 +488,7 @@ fn tool_result_uses_native_id_after_binding_reload() {
                 vec![
                     json!({"event":"start"}),
                     json!({"event":"text_delta","text":"hello"}),
-                    done("stop", 12),
+                    done("stop", /*marker*/ 12),
                 ],
             ),
         ],
@@ -515,7 +525,7 @@ fn tool_result_uses_native_id_after_binding_reload() {
 
 #[test]
 fn malformed_done_does_not_publish_tools_or_commit_ready() {
-    let mut bad_done = done("tool_use", 10);
+    let mut bad_done = done("tool_use", /*marker*/ 10);
     bad_done["usage"]["reasoning"] = json!(999);
     let mut fake = Fake::new(vec![initial(vec![
         json!({"event":"start"}),
@@ -547,7 +557,7 @@ fn protocol_rejects_invalid_progress_usage_and_tool_shapes() {
     ] {
         assert!(WireEvent::parse(&event.to_string()).is_err());
     }
-    assert!(WireEvent::parse(&done("stop", 10).to_string()).is_ok());
+    assert!(WireEvent::parse(&done("stop", /*marker*/ 10).to_string()).is_ok());
 }
 
 #[test]
@@ -567,7 +577,7 @@ fn describe_rejects_protocol_and_invalid_limits() {
 fn codex_instruction_reseed_after_summary_is_rebased_into_current_system() {
     let mut fake = Fake::new(vec![initial(vec![
         json!({"event":"start"}),
-        done("stop", 10),
+        done("stop", /*marker*/ 10),
     ])]);
     let input = prompt(
         vec![
@@ -606,7 +616,7 @@ fn recovers_interrupted_generation_by_rebuilding_without_publishing_old_tools() 
                 vec![
                     json!({"event":"start"}),
                     json!({"event":"text_delta","text":"recovered"}),
-                    done("stop", 10),
+                    done("stop", /*marker*/ 10),
                 ],
             ),
         ],
@@ -648,7 +658,7 @@ fn refuses_diverged_native_marker_without_mutation() {
         initial(vec![
             json!({"event":"start"}),
             json!({"event":"text_delta","text":"hello"}),
-            done("stop", 10),
+            done("stop", /*marker*/ 10),
         ]),
         vec![
             ("describe", vec![describe()]),
@@ -687,7 +697,7 @@ fn cancelling_image_preparation_suppresses_generation_and_recovers_from_retained
             ("rebuild", vec![]),
             ("cancel", vec![]),
         ],
-        visual_continue("rebuild", 9, vec![], answer(10)),
+        visual_continue("rebuild", /*marker*/ 9, vec![], answer(/*marker*/ 10)),
     ]);
     let cancelled = Arc::new(AtomicBool::new(false));
     let flag = cancelled.clone();
@@ -849,7 +859,7 @@ fn rewind_preview_and_apply_keep_tool_effects_and_align_codex_history() {
         initial(vec![
             json!({"event":"start"}),
             json!({"event":"text_delta","text":"one"}),
-            done("stop", 10),
+            done("stop", /*marker*/ 10),
         ]),
         vec![
             ("describe", vec![describe()]),
@@ -860,7 +870,7 @@ fn rewind_preview_and_apply_keep_tool_effects_and_align_codex_history() {
                 vec![
                     json!({"event":"start"}),
                     json!({"event":"text_delta","text":"two"}),
-                    done("stop", 20),
+                    done("stop", /*marker*/ 20),
                 ],
             ),
             ("rewind_cost", vec![json!({"ok":true,"prefill":4})]),
@@ -899,7 +909,14 @@ fn rewind_preview_and_apply_keep_tool_effects_and_align_codex_history() {
     )
     .0
     .unwrap();
-    let preview = rewind_control(&fake.socket, &fake.state(), "thread-1", Some(10), None).unwrap();
+    let preview = rewind_control(
+        &fake.socket,
+        &fake.state(),
+        "thread-1",
+        Some(10),
+        /*rollout*/ None,
+    )
+    .unwrap();
     assert_eq!(preview["prefill"], 4);
     let rollout = fake.root.join("rollout.jsonl");
     fs::write(&rollout,"{\"timestamp\":\"2026-10-13T00:00:00Z\",\"ordinal\":0,\"type\":\"session_meta\",\"payload\":{\"id\":\"thread-1\"}}\n").unwrap();
@@ -934,12 +951,15 @@ fn rewind_preview_and_apply_keep_tool_effects_and_align_codex_history() {
 #[test]
 fn changed_transcript_compacts_in_same_owned_session() {
     let mut fake = Fake::new(vec![
-        initial(vec![json!({"event":"start"}), done("stop", 10)]),
+        initial(vec![json!({"event":"start"}), done("stop", /*marker*/ 10)]),
         vec![
             ("describe", vec![describe()]),
             ("open", vec![json!({"ok":true,"marker":10,"pending":[]})]),
             ("rebuild", vec![json!({"ok":true})]),
-            ("generate", vec![json!({"event":"start"}), done("stop", 20)]),
+            (
+                "generate",
+                vec![json!({"event":"start"}), done("stop", /*marker*/ 20)],
+            ),
         ],
     ]);
     run_capture(&fake, prompt(vec![user("old")], vec![]))
@@ -1013,7 +1033,7 @@ fn missing_owned_session_reconstructs_without_ephemeral_or_foreign_deletion() {
         initial(vec![
             json!({"event":"start"}),
             json!({"event":"text_delta","text":"one"}),
-            done("stop", 10),
+            done("stop", /*marker*/ 10),
         ]),
         vec![
             ("describe", vec![describe()]),
@@ -1026,7 +1046,10 @@ fn missing_owned_session_reconstructs_without_ephemeral_or_foreign_deletion() {
                 vec![json!({"ok":true,"session":"cccccccccccccccccccccccccccccccc","marker":0})],
             ),
             ("rebuild", vec![json!({"ok":true})]),
-            ("generate", vec![json!({"event":"start"}), done("stop", 20)]),
+            (
+                "generate",
+                vec![json!({"event":"start"}), done("stop", /*marker*/ 20)],
+            ),
         ],
     ]);
     let (result, out) = run_capture(&fake, prompt(vec![user("first")], vec![]));
@@ -1058,7 +1081,7 @@ fn missing_owned_session_reconstructs_without_ephemeral_or_foreign_deletion() {
 
 #[test]
 fn completed_turn_forces_checkpoint_when_autosave_did_not_run() {
-    let mut terminal = done("stop", 10);
+    let mut terminal = done("stop", /*marker*/ 10);
     terminal.as_object_mut().unwrap().remove("checkpoint");
     let mut script = initial(vec![json!({"event":"start"}), terminal]);
     script.push((
@@ -1092,7 +1115,7 @@ fn reasoning() -> ReasoningOptions {
 fn output_default_and_reasoning_settings_follow_describe_without_reseeding() {
     let mut fake = Fake::new(vec![initial(vec![
         json!({"event":"start"}),
-        done("stop", 10),
+        done("stop", /*marker*/ 10),
     ])]);
     let mut input = prompt(vec![user("hello")], vec![]);
     input.max_tokens = None;
@@ -1163,7 +1186,7 @@ fn reasoning_roundtrips_through_tool_resume_and_transcript_rebuild() {
             json!({"event":"text_delta","text":"checking"}),
             json!({"event":"toolcall_start","id":7,"name":"echo"}),
             json!({"event":"toolcall_end","id":7,"name":"echo","arguments":{"text":"hello"}}),
-            done("tool_use", 10),
+            done("tool_use", /*marker*/ 10),
         ]),
         vec![
             ("describe", vec![describe()]),
@@ -1177,7 +1200,7 @@ fn reasoning_roundtrips_through_tool_resume_and_transcript_rebuild() {
                 vec![
                     json!({"event":"start"}),
                     json!({"event":"text_delta","text":"hello"}),
-                    done("stop", 12),
+                    done("stop", /*marker*/ 12),
                 ],
             ),
         ],
@@ -1185,7 +1208,10 @@ fn reasoning_roundtrips_through_tool_resume_and_transcript_rebuild() {
             ("describe", vec![describe()]),
             ("open", vec![json!({"ok":true,"marker":12,"pending":[]})]),
             ("rebuild", vec![json!({"ok":true})]),
-            ("generate", vec![json!({"event":"start"}), done("stop", 14)]),
+            (
+                "generate",
+                vec![json!({"event":"start"}), done("stop", /*marker*/ 14)],
+            ),
         ],
     ]);
     let mut first = prompt(vec![user("hello")], tools.clone());
@@ -1236,7 +1262,7 @@ fn reasoning_roundtrips_through_tool_resume_and_transcript_rebuild() {
 
 #[test]
 fn length_closes_partial_reasoning_without_automatic_followup() {
-    let mut terminal = done("length", 10);
+    let mut terminal = done("length", /*marker*/ 10);
     terminal["reasoning_close"] = json!("length");
     let mut fake = Fake::new(vec![
         initial(vec![
@@ -1294,7 +1320,7 @@ fn length_never_publishes_tool_calls_and_next_user_turn_rebuilds_safely() {
         if complete {
             events.push(json!({"event":"toolcall_end","id":7,"name":"echo","arguments":{}}));
         }
-        events.push(done("length", 10));
+        events.push(done("length", /*marker*/ 10));
         let mut fake = Fake::new(vec![
             initial(events),
             vec![
@@ -1305,7 +1331,10 @@ fn length_never_publishes_tool_calls_and_next_user_turn_rebuilds_safely() {
                 ("describe", vec![describe()]),
                 ("open", vec![json!({"ok":true,"marker":10,"pending":[7]})]),
                 ("rebuild", vec![json!({"ok":true})]),
-                ("generate", vec![json!({"event":"start"}), done("stop", 12)]),
+                (
+                    "generate",
+                    vec![json!({"event":"start"}), done("stop", /*marker*/ 12)],
+                ),
             ],
         ]);
         let tools = vec![json!({"type":"function","name":"echo","parameters":{}})];
@@ -1362,7 +1391,7 @@ fn ordinary_stop_with_unfinished_tool_is_rejected_without_publication() {
     let mut fake = Fake::new(vec![initial(vec![
         json!({"event":"start"}),
         json!({"event":"toolcall_start","id":7,"name":"echo"}),
-        done("stop", 10),
+        done("stop", /*marker*/ 10),
     ])]);
     let (result, events) = run_capture(
         &fake,
@@ -1391,7 +1420,7 @@ fn reasoning_and_text_stream_with_one_active_item_and_no_duplicate_completion() 
         json!({"event":"start"}),
         json!({"event":"reasoning_delta","text":"a thought"}),
         json!({"event":"text_delta","text":"an answer"}),
-        done("stop", 10),
+        done("stop", /*marker*/ 10),
     ])]);
     let mut input = prompt(vec![user("hello")], vec![]);
     input.reasoning = Some(reasoning());
@@ -1434,7 +1463,10 @@ fn failure_after_reasoning_transition_recovers_committed_thought_without_replayi
             ("describe", vec![describe()]),
             ("open", vec![json!({"ok":true,"marker":9,"pending":[7]})]),
             ("rebuild", vec![json!({"ok":true})]),
-            ("generate", vec![json!({"event":"start"}), done("stop", 12)]),
+            (
+                "generate",
+                vec![json!({"event":"start"}), done("stop", /*marker*/ 12)],
+            ),
         ],
     ]);
     let tools = vec![json!({"type":"function","name":"echo","parameters":{}})];

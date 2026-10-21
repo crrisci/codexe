@@ -543,7 +543,7 @@ pub fn run_cancellable(
     let (declarations, registry) = tools(&prompt.tools)?;
     safe_json(
         &json!({"system":system,"messages":messages,"tools":declarations}),
-        0,
+        /*depth*/ 0,
     )?;
     let mut wire = WireConnection::connect(socket, 4 * 1024 * 1024, Duration::from_secs(600))?;
     wire.watch_cancellation(cancelled)?;

@@ -20,28 +20,28 @@ fn native_xenolith_sessions_use_this_process_without_reusing_a_managed_package()
         };
         assert!(daemon_startup::native_requires_embedded(
             WireApi::Xenolith,
-            false,
+            /*agents_overview*/ false,
             &target,
         ));
         assert!(!daemon_startup::native_requires_embedded(
             WireApi::Responses,
-            false,
+            /*agents_overview*/ false,
             &target,
         ));
         assert!(!daemon_startup::native_requires_embedded(
             WireApi::Xenolith,
-            true,
+            /*agents_overview*/ true,
             &target,
         ));
     }
     assert!(daemon_startup::native_requires_embedded(
         WireApi::Xenolith,
-        false,
+        /*agents_overview*/ false,
         &AppServerTarget::Embedded,
     ));
     assert!(!daemon_startup::native_requires_embedded(
         WireApi::Xenolith,
-        false,
+        /*agents_overview*/ false,
         &AppServerTarget::Remote { endpoint },
     ));
 }

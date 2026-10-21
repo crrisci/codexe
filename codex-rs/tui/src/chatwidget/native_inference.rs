@@ -73,7 +73,7 @@ impl ChatWidget {
 
     pub(super) fn clear_native_inference(&mut self) {
         self.status_state.native_inference = None;
-        self.bottom_pane.set_native_inference(None);
+        self.bottom_pane.set_native_inference(/*message*/ None);
     }
 
     pub(super) fn clear_active_native_inference(&mut self) {
