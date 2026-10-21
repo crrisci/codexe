@@ -65,7 +65,10 @@ jobs:
       CODEX_CI_PROFILE: ${{ inputs.profile }}
       CODEX_CI_TARGET: ${{ inputs.target }}
       CARGO_INCREMENTAL: "0"
-      SCCACHE_CACHE_SIZE: 10G
+      # Keep cold archive builds within standard hosted-runner resources.
+      CARGO_BUILD_JOBS: "2"
+      CARGO_PROFILE_CI_TEST_DEBUG: "0"
+      SCCACHE_CACHE_SIZE: 2G
       NEXTEST_ARCHIVE_FILE: nextest-${{ inputs.artifact_id }}.tar.zst
       TEST_HELPERS_ARTIFACT: nextest-test-helpers-${{ inputs.artifact_id }}
     steps:
@@ -167,6 +170,13 @@ jobs:
         uses: ./.github/actions/setup-rusty-v8
         with:
           target: ${{ inputs.target }}
+
+      - name: Report archive build resources (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          free -h
+          df -h
 
       - name: Build nextest archive
         shell: bash
