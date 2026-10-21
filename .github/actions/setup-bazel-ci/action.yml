@@ -31,6 +31,13 @@ runs:
       run: |
         "repository-cache-path=$env:BAZEL_REPOSITORY_CACHE" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
+    # The repository maintainer has accepted the Visual Studio terms for these
+    # Windows CI jobs, matching the Windows release workflow's explicit opt-in.
+    - name: Enable licensed MSVC runtime downloads (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: '"BAZEL_MSVC_RUNTIME_VISUAL_STUDIO_EULA=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append'
+
     - name: Expose MSVC SDK environment (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
