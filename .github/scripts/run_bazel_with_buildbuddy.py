@@ -134,10 +134,15 @@ def windows_voice_args(args: Sequence[str], env: Mapping[str, str]) -> list[str]
     repository = env.get("VOICE_WINDOWS_BAZEL_REPOSITORY")
     system_root = env.get("VOICE_WINDOWS_SYSTEM_ROOT")
     architecture = env.get("VOICE_WINDOWS_HOST_ARCH")
-    if command not in {"build", "test", "run", "coverage", "aquery", "cquery"} or not repository:
+    if (
+        command not in {"build", "test", "run", "coverage", "aquery", "cquery"}
+        or not repository
+    ):
         return []
     if not system_root or not architecture:
-        raise ValueError("provisioned Windows voice tools require SystemRoot and host architecture")
+        raise ValueError(
+            "provisioned Windows voice tools require SystemRoot and host architecture"
+        )
     return [
         f"--inject_repository=voice_windows_tools={repository}",
         "--//third_party/voice:windows_installed_tools=@voice_windows_tools//:tools",

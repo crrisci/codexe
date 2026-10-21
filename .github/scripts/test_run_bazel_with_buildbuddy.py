@@ -42,12 +42,19 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
         args = ["test", "--", "//codex-rs/voice-host:all"]
         result = run_bazel_with_buildbuddy.bazel_args_with_remote_config(args, env)
         separator = result.index("--")
-        self.assertIn("--inject_repository=voice_windows_tools=D:/build tools/voice", result[:separator])
+        self.assertIn(
+            "--inject_repository=voice_windows_tools=D:/build tools/voice",
+            result[:separator],
+        )
         self.assertIn("--action_env=SystemRoot=C:/Windows", result[:separator])
-        self.assertIn("--host_action_env=PROCESSOR_ARCHITECTURE=AMD64", result[:separator])
+        self.assertIn(
+            "--host_action_env=PROCESSOR_ARCHITECTURE=AMD64", result[:separator]
+        )
         self.assertEqual(result[separator:], args[1:])
         self.assertEqual(
-            run_bazel_with_buildbuddy.bazel_args_with_remote_config(["mod", "deps"], env),
+            run_bazel_with_buildbuddy.bazel_args_with_remote_config(
+                ["mod", "deps"], env
+            ),
             ["mod", "deps"],
         )
 
