@@ -1,8 +1,10 @@
 //! Inline media uses Codex's retained bytes; no paths, downloads or extra media store.
-use crate::protocol::{Describe, invalid};
+use crate::protocol::Describe;
+use crate::protocol::invalid;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use serde_json::{Value, json};
+use serde_json::Value;
+use serde_json::json;
 use std::io;
 
 const MAX_IMAGE_BYTES: usize = 48 * 1024 * 1024;
@@ -86,7 +88,9 @@ pub(crate) fn configure(
         if !vision.budgets.contains(&selected) {
             return Err(invalid("image budget is not advertised by Xenolith"));
         }
-        let data = image["data"].as_str().expect("validated inline image");
+        let data = image["data"]
+            .as_str()
+            .ok_or_else(|| invalid("invalid inline image data"))?;
         let bytes =
             (data.len() / 4 * 3 - data.bytes().rev().take_while(|b| *b == b'=').count()) as u64;
         let format = if data.starts_with("iVBOR") {

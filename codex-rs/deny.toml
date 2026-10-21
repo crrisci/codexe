@@ -70,6 +70,12 @@ feature-depth = 1
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
 ignore = [
+    # Reviewed 2026-10-21: maintenance advisories, not vulnerability exemptions.
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml is unmaintained; used by i18n-config through age in codex-secrets; remove when age/i18n-config migrates to toml" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names is unmaintained; used by zbus 4 through TUI notifications and keyring; remove when both migrate to zbus 6" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant is unmaintained; used by zbus 4 through TUI notifications and keyring; remove when both migrate to zbus 6" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive is unmaintained; used by zbus 4 through TUI notifications and keyring; remove when both migrate to zbus 6" },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is unmaintained; used by serde_yaml in plugin and skill metadata parsing; remove when the workspace migrates from serde_yaml to a maintained parser" },
     # Reviewed 2026-07-02. Keep this list in sync with .cargo/audit.toml.
     # Each exception must identify the dependency path and removal condition.
     { id = "RUSTSEC-2024-0388", reason = "derivative is unmaintained; pulled in via starlark/starlark_syntax v0.14.2 used by execpolicy/cli/core; no fixed starlark release yet" },
@@ -152,6 +158,8 @@ confidence-threshold = 0.8
 # Allow 1 or more licenses on a per-crate basis, so that particular licenses
 # aren't accepted for every possible crate as with the normal allow list
 exceptions = [
+    # ZIP 9 uses the Rust port of libbzip2, retaining the original permissive license.
+    { allow = ["bzip2-1.0.6"], crate = "libbz2-rs-sys" },
     # Each entry is the crate and version constraint, and its specific allow
     # list
     #{ allow = ["Zlib"], crate = "adler32" },

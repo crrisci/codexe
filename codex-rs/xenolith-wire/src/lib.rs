@@ -9,13 +9,16 @@
 
 #![cfg(unix)]
 
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Read;
+use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 struct CancellationWatch {

@@ -2,6 +2,7 @@
 // Licensed under Apache-2.0; upstream copyright and notices are retained.
 
 //! Offline session control: close Codex before applying a rewind.
+#[cfg(unix)]
 use std::path::Path;
 #[cfg(unix)]
 fn main() {
@@ -27,7 +28,13 @@ fn main() {
         marker,
         a.get(4).map(Path::new),
     ) {
-        Ok(report) => println!("{}", serde_json::to_string_pretty(&report).unwrap()),
+        Ok(report) => match serde_json::to_string_pretty(&report) {
+            Ok(json) => println!("{json}"),
+            Err(error) => {
+                eprintln!("cannot serialize rewind report: {error}");
+                std::process::exit(1);
+            }
+        },
         Err(error) => {
             eprintln!("{error}");
             std::process::exit(1)

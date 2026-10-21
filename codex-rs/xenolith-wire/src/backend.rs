@@ -8,14 +8,27 @@
 //! never silently replayed. Recovery rebuilds from Codex's committed transcript; it never executes tools.
 use crate::WireConnection;
 use crate::images;
-use crate::protocol::{Checkpoint, Describe, Usage, WireEvent, invalid, request};
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use std::collections::{BTreeMap, VecDeque};
-use std::fs::{self, OpenOptions};
-use std::io::{self, Read, Seek, Write};
+use crate::protocol::Checkpoint;
+use crate::protocol::Describe;
+use crate::protocol::Usage;
+use crate::protocol::WireEvent;
+use crate::protocol::invalid;
+use crate::protocol::request;
+use serde::Deserialize;
+use serde::Serialize;
+use serde_json::Value;
+use serde_json::json;
+use std::collections::BTreeMap;
+use std::collections::VecDeque;
+use std::fs::OpenOptions;
+use std::fs::{self};
+use std::io::Read;
+use std::io::Seek;
+use std::io::Write;
+use std::io::{self};
 use std::os::fd::AsRawFd;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::os::unix::fs::DirBuilderExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::time::Duration;
 
@@ -222,7 +235,7 @@ fn wire_name(name: &str, namespace: Option<&str>) -> String {
     {
         return name.to_owned();
     }
-    let identity = serde_json::to_vec(&(namespace, name)).expect("string identity serializes");
+    let identity = json!([namespace, name]).to_string().into_bytes();
     let hex = identity
         .iter()
         .map(|b| format!("{b:02x}"))
@@ -369,7 +382,9 @@ fn translate(prompt: &Prompt) -> io::Result<(String, Vec<Value>, Vec<Value>)> {
                     if messages.last().is_none_or(|m| m["role"] != "assistant") {
                         messages.push(json!({"role":"assistant","text":""}));
                     }
-                    let assistant = messages.last_mut().expect("assistant just inserted");
+                    let assistant = messages
+                        .last_mut()
+                        .ok_or_else(|| invalid("missing assistant message"))?;
                     let previous = assistant["reasoning"].as_str().unwrap_or("");
                     assistant["reasoning"] = json!(format!("{previous}{reasoning}"));
                 }
@@ -429,7 +444,7 @@ fn translate(prompt: &Prompt) -> io::Result<(String, Vec<Value>, Vec<Value>)> {
                     return Err(invalid("tool result ID/type mismatch"));
                 }
                 let mut content = images::content(&item["output"])?;
-                content["text"] = json!(shell_result(&name, content["text"].as_str().unwrap()));
+                content["text"] = json!(shell_result(&name, string(&content, "text")?));
                 content["role"] = json!("tool");
                 content["tool"] = json!(name);
                 content["status"] = json!("ok");
@@ -679,8 +694,7 @@ pub fn run_cancellable(
                         return Err(invalid("incremental tool result ID mismatch"));
                     }
                     let mut content = images::content(&item["output"])?;
-                    content["text"] =
-                        json!(shell_result(&call.name, content["text"].as_str().unwrap()));
+                    content["text"] = json!(shell_result(&call.name, string(&content, "text")?));
                     content["op"] = json!("append");
                     content["role"] = json!("tool");
                     content["call_id"] = json!(call.native_id);
@@ -690,7 +704,8 @@ pub fn run_cancellable(
                 _ => return Err(invalid("unsupported incremental history change")),
             };
             if let Some(image) = op.get_mut("image") {
-                image["budget"] = json!(image_budget.expect("validated image budget"));
+                image["budget"] =
+                    json!(image_budget.ok_or_else(|| invalid("missing image budget"))?);
             }
             appends.push(op);
         }
@@ -850,7 +865,7 @@ pub fn run_cancellable(
                 }
                 let truncated_calls = stop == "length" && !calls.is_empty();
                 if !truncated_calls
-                    && ((stop == "tool_use") != !calls.is_empty()
+                    && ((stop == "tool_use") == calls.is_empty()
                         || calls.values().any(|(_, a)| a.is_none()))
                 {
                     return Err(invalid("incomplete native tool turn"));

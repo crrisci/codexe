@@ -2,8 +2,8 @@
 # Licensed under Apache-2.0; upstream copyright and notices are retained.
 
 [workspace]
-exclude = ["xenolith-wire"]
 members = [
+    "xenolith-wire",
     "aws-auth",
     "analytics",
     "agent-graph-store",
@@ -555,7 +555,7 @@ whoami = "1.6.1"
 wildmatch = "2.6.1"
 winapi-util = "0.1.11"
 windows-sys = "0.61.2"
-zip = "2.4.2"
+zip = "9.0.0"
 zstd = "0.13"
 
 wiremock = "0.6"

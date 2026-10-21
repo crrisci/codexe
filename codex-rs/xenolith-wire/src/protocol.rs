@@ -3,7 +3,8 @@
 
 //! Validated wire v1/v2 replies and local inference events. No Responses transport.
 use crate::WireConnection;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use serde_json::Value;
 use std::io;
 
@@ -235,15 +236,13 @@ impl WireEvent {
                 tokens,
                 total,
                 ..
-            } => {
-                if !["prefill", "decode"].contains(&phase.as_str())
-                    || state
-                        .as_deref()
-                        .is_some_and(|s| !["running", "finished"].contains(&s))
-                    || (phase == "prefill" && total.is_none_or(|n| n < *tokens))
-                {
-                    return Err(invalid("invalid inference progress"));
-                }
+            } if (!["prefill", "decode"].contains(&phase.as_str())
+                || state
+                    .as_deref()
+                    .is_some_and(|s| !["running", "finished"].contains(&s))
+                || (phase == "prefill" && total.is_none_or(|n| n < *tokens))) =>
+            {
+                return Err(invalid("invalid inference progress"));
             }
             Self::ToolcallEnd { arguments, .. } if !arguments.is_object() => {
                 return Err(invalid("non-object tool arguments"));

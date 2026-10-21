@@ -5,7 +5,7 @@ The name combines Codex with a nod to Intel Xe processors.
 CodeXe preserves Codex's agent loop, tools, sandbox and approvals,
 while exposing the state of local inference and keeping durable KV sessions.
 
-[Setup guide](XENOLITH.md) · [Modification notices](XENOLITH-MODIFICATIONS.md)
+[Setup guide](XENOLITH.md) | [Modification notices](XENOLITH-MODIFICATIONS.md)
 
 ## Why native integration?
 
@@ -38,7 +38,7 @@ Rust **1.95.0**, a C/C++ compiler, OpenSSL development headers and a compatible
 `bwrap` for Linux sandboxed tools. Xenolith and model weights are separate.
 
 ```sh
-git clone --branch xenolith-native https://github.com/crrisci/codexe.git codexe
+git clone --branch main https://github.com/crrisci/codexe.git codexe
 cd codexe/codex-rs
 cargo build -p codex-cli --bin codex
 ```

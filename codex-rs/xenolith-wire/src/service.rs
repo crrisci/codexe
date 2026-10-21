@@ -7,19 +7,29 @@
 
 use crate::WireConnection;
 use crate::protocol::Describe;
-use std::ffi::{OsStr, OsString};
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom};
+use std::ffi::OsStr;
+use std::ffi::OsString;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::fs::{self};
+use std::io::Read;
+use std::io::Seek;
+use std::io::SeekFrom;
+use std::io::{self};
 use std::os::fd::AsRawFd;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::os::unix::fs::DirBuilderExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
-use std::time::{Duration, Instant};
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::Child;
+use std::process::Command;
+use std::process::Stdio;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+use std::time::Instant;
 
 const BOOTSTRAP_MAX_FRAME: usize = 4 * 1024 * 1024;
 const LOG_TAIL_BYTES: u64 = 8192;
@@ -533,10 +543,13 @@ fn log_tail(path: &Path) -> String {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::BufRead;
+    use std::io::BufReader;
+    use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::UnixListener;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
 
     const INFO: &str = r#"{"ok":true,"protocol":1,"model":"fixture","context_window":16384,"max_output":2048,"max_frame":4096,"kvstore":true,"reasoning":{"efforts":["low"],"history":["discard"],"budget_tokens":true}}"#;
 
@@ -600,9 +613,8 @@ while True:
             data += chunk
         if data:
             assert json.loads(data)['op'] == 'describe'
-            peer.sendall(({info:?} + '\n').encode())
-"##,
-                    info = INFO
+            peer.sendall(({INFO:?} + '\n').encode())
+"##
                 ),
             )
             .unwrap();

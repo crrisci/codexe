@@ -1,6 +1,12 @@
 [advisories]
 # Reviewed 2026-07-02. Keep this list in sync with ../deny.toml.
 ignore = [
+    # Reviewed 2026-10-21; keep in sync with ../deny.toml.
+    "RUSTSEC-2026-0374", # basic-toml is unmaintained; used by i18n-config through age in codex-secrets; remove when age/i18n-config migrates to toml
+    "RUSTSEC-2026-0371", # zbus_names is unmaintained; used by zbus 4 through TUI notifications and keyring; remove when both migrate to zbus 6
+    "RUSTSEC-2026-0370", # zvariant is unmaintained; used by zbus 4 through TUI notifications and keyring; remove when both migrate to zbus 6
+    "RUSTSEC-2026-0372", # zvariant_derive is unmaintained; used by zbus 4 through TUI notifications and keyring; remove when both migrate to zbus 6
+    "RUSTSEC-2024-0449", # unsafe-libyaml is unmaintained; used by serde_yaml in plugin and skill metadata parsing; remove when the workspace migrates from serde_yaml to a maintained parser
     "RUSTSEC-2024-0388", # derivative 2.2.0 via starlark/starlark_syntax; upstream crate is unmaintained
     "RUSTSEC-2025-0057", # fxhash 0.2.1 via starlark_map/bm25; upstream crate is unmaintained
     "RUSTSEC-2024-0436", # paste 1.0.15 via starlark/v8; upstream crate is unmaintained

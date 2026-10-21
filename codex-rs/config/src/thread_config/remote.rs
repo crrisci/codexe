@@ -233,6 +233,8 @@ fn model_provider_to_proto(
         supports_standalone_web_search,
         include_internal_metadata: _,
         capabilities: _,
+        mmproj: _,
+        image_budget: _,
     } = provider;
 
     proto::ModelProvider {

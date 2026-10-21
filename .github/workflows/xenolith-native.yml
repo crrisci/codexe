@@ -3,9 +3,9 @@
 name: Xenolith native
 on:
   push:
-    branches: [xenolith-native]
+    branches: [main, xenolith-native]
   pull_request:
-    branches: [xenolith-native]
+    branches: [main, xenolith-native]
   workflow_dispatch:
 permissions:
   contents: read
@@ -42,11 +42,10 @@ jobs:
         with:
           node-version: 22
       - name: Native wire and backend tests
-        run: cargo +1.95.0 test --manifest-path codex-rs/xenolith-wire/Cargo.toml
+        run: cargo +1.95.0 test --locked --manifest-path codex-rs/Cargo.toml -p codex-xenolith-wire
       - name: Check native formatting
         working-directory: codex-rs
         run: |
-          cargo +1.95.0 fmt --manifest-path xenolith-wire/Cargo.toml --check
           cargo +1.95.0 fmt -- --config imports_granularity=Item --check
       - name: Check acceptance script syntax
         run: |
@@ -55,6 +54,8 @@ jobs:
         run: cargo +1.95.0 build --manifest-path codex-rs/Cargo.toml -p codex-cli --bin codex -j 2
       - name: Check built-in Xenolith provider defaults
         run: cargo +1.95.0 test --manifest-path codex-rs/Cargo.toml -p codex-model-provider-info -p codex-config --lib xenolith -j 2
+      - name: Check plugin archive extraction
+        run: cargo +1.95.0 test --locked --manifest-path codex-rs/Cargo.toml -p codex-core-plugins --lib startup_sync -j 2
       - name: Check native TUI progress and streamed answer integrity
         run: cargo +1.95.0 test --manifest-path codex-rs/Cargo.toml -p codex-tui --lib xenolith -j 2
       - name: Exercise native discovery, reasoning, tools and recovery through the CLI

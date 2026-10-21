@@ -2,15 +2,25 @@
 // Licensed under Apache-2.0; upstream copyright and notices are retained.
 
 #![cfg(unix)]
+// Fixture failures should fail the integration test immediately.
+#![allow(clippy::unwrap_used)]
 use codex_xenolith_wire::WireConnection;
-use codex_xenolith_wire::backend::{Output, Prompt, ReasoningOptions, run};
-use codex_xenolith_wire::protocol::{Describe, WireEvent};
-use serde_json::{Value, json};
+use codex_xenolith_wire::backend::Output;
+use codex_xenolith_wire::backend::Prompt;
+use codex_xenolith_wire::backend::ReasoningOptions;
+use codex_xenolith_wire::backend::run;
+use codex_xenolith_wire::protocol::Describe;
+use codex_xenolith_wire::protocol::WireEvent;
+use serde_json::Value;
+use serde_json::json;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Write;
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
 
@@ -133,7 +143,7 @@ impl Fake {
                     requests.push(value.clone());
                     let _ = request_tx.send(value);
                     for reply in replies {
-                        writeln!(socket, "{}", reply).unwrap();
+                        writeln!(socket, "{reply}").unwrap();
                     }
                 }
             }
@@ -668,7 +678,8 @@ fn refuses_diverged_native_marker_without_mutation() {
 
 #[test]
 fn cancelling_image_preparation_suppresses_generation_and_recovers_from_retained_bytes() {
-    use std::sync::{Arc, atomic::AtomicBool};
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
     let mut fake = Fake::new(vec![
         vec![
             ("describe", vec![vision_describe()]),
@@ -713,7 +724,8 @@ fn cancelling_image_preparation_suppresses_generation_and_recovers_from_retained
 
 #[test]
 fn cancellation_interrupts_a_blocked_generation_without_progress() {
-    use std::sync::{Arc, atomic::AtomicBool};
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
     let mut fake = Fake::new(vec![vec![
         ("describe", vec![describe()]),
         ("create", vec![json!({"ok":true,"session":SESSION})]),
@@ -757,7 +769,8 @@ fn cancellation_interrupts_a_blocked_generation_without_progress() {
 
 #[test]
 fn telemetry_and_shell_results_keep_missing_data_and_literal_stdout_distinct() {
-    use codex_xenolith_wire::backend::{presentation, shell_result};
+    use codex_xenolith_wire::backend::presentation;
+    use codex_xenolith_wire::backend::shell_result;
     let (_, s) = presentation(
         &json!({"event":"inference_progress","phase":"prefill","tokens":0,"total":10,"elapsed_ms":0}),
     );

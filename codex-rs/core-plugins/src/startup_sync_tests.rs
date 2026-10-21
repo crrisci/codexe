@@ -1463,3 +1463,19 @@ fn curated_repo_backup_archive_zip_bytes(sha: &str) -> Vec<u8> {
 
     writer.finish().expect("finish zip writer").into_inner()
 }
+
+#[cfg(unix)]
+#[test]
+fn zip_permissions_preserve_executable_bits_without_privileged_bits() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempdir().expect("tempdir");
+    let file = tmp.path().join("script");
+    std::fs::write(&file, b"#!/bin/sh\n").expect("write file");
+    apply_zip_permissions(Some(0o107755), &file).expect("apply permissions");
+    let mode = std::fs::metadata(&file)
+        .expect("file metadata")
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o7777, 0o755);
+}
