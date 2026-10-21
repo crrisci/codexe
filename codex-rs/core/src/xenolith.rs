@@ -4,13 +4,19 @@
 //! Small native entry point: no HTTP, SSE parser or Responses request builder.
 mod config;
 pub use codex_xenolith_wire::service::ServicePhase;
-pub use config::{configure, configure_with_status};
+pub use config::configure;
+pub use config::configure_with_status;
 
-use crate::client_common::{Prompt, ResponseEvent, ResponseStream};
-use codex_protocol::error::{CodexErrorDetails, Result};
-use codex_protocol::openai_models::{ModelInfo, ReasoningEffort};
+use crate::client_common::Prompt;
+use crate::client_common::ResponseEvent;
+use crate::client_common::ResponseStream;
+use codex_protocol::error::CodexErrorDetails;
+use codex_protocol::error::Result;
+use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::TokenUsage;
-use codex_xenolith_wire::backend::{self, Output};
+use codex_xenolith_wire::backend::Output;
+use codex_xenolith_wire::backend::{self};
 use std::io;
 use std::path::PathBuf;
 use tokio::sync::mpsc;

@@ -44,7 +44,10 @@ jobs:
       - name: Native wire and backend tests
         run: cargo +1.95.0 test --manifest-path codex-rs/xenolith-wire/Cargo.toml
       - name: Check native formatting
-        run: cargo +1.95.0 fmt --manifest-path codex-rs/xenolith-wire/Cargo.toml --check
+        working-directory: codex-rs
+        run: |
+          cargo +1.95.0 fmt --manifest-path xenolith-wire/Cargo.toml --check
+          cargo +1.95.0 fmt -- --config imports_granularity=Item --check
       - name: Check acceptance script syntax
         run: |
           for script in xenolith/tests/*.mjs; do node --check "$script"; done

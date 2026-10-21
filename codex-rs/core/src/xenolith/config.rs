@@ -8,18 +8,21 @@ use codex_model_provider_info::WireApi;
 use codex_models_manager::model_info::model_info_from_slug;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::openai_models::{
-    InputModality, ModelInfo, ModelVisibility, ModelsResponse, ReasoningEffort,
-    ReasoningEffortPreset,
-};
+use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ModelVisibility;
+use codex_protocol::openai_models::ModelsResponse;
+use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_xenolith_wire::backend::ReasoningOptions;
 use codex_xenolith_wire::protocol::Describe;
-use codex_xenolith_wire::service::{ServicePhase, ServiceSettings, ensure_service_cancellable};
+use codex_xenolith_wire::service::ServicePhase;
+use codex_xenolith_wire::service::ServiceSettings;
+use codex_xenolith_wire::service::ensure_service_cancellable;
 use std::io;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 fn invalid(message: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message.into())
