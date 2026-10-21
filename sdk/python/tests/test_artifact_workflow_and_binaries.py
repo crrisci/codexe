@@ -287,6 +287,42 @@ def test_root_format_driver_covers_all_formatter_groups(
     ]
 
 
+def test_root_rust_formatter_stays_within_windows_command_line_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    script = _load_root_format_script_module()
+    files = [
+        f"codex-rs/src/a Rust file with a long descriptive name {index:04}.rs"
+        for index in range(2000)
+    ]
+    for name in files:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    monkeypatch.setattr(script, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        script.subprocess,
+        "check_output",
+        lambda *args, **kwargs: b"\0".join(os.fsencode(name) for name in files),
+    )
+    group = script.rust_formatter_group(check=True)
+    assert len(group.commands) > 1
+    formatted = []
+    for command in group.commands:
+        assert len(subprocess.list2cmdline(command.args)) < 32767
+        formatted.extend(arg for arg in command.args if arg.endswith(".rs"))
+    assert formatted == [os.path.relpath(tmp_path / name, tmp_path / "codex-rs") for name in files]
+
+
+def test_root_rust_formatter_does_not_read_stdin_for_an_empty_repository(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = _load_root_format_script_module()
+    monkeypatch.setattr(script.subprocess, "check_output", lambda *args, **kwargs: b"")
+    assert script.rust_formatter_group(check=True).commands == ()
+
+
 def test_root_format_driver_discards_successful_command_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

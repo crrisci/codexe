@@ -79,7 +79,7 @@ def rust_formatter_group(*, check: bool) -> FormatterGroup:
     batch_bytes = 0
     for path in rust_files:
         path_bytes = len(os.fsencode(path)) + 1
-        if batch and batch_bytes + path_bytes > 64 * 1024:
+        if batch and batch_bytes + path_bytes > 16 * 1024:
             commands.append(Command((*args, *batch), rust_root))
             batch = []
             batch_bytes = 0
