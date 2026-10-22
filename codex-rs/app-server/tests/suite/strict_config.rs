@@ -128,7 +128,7 @@ fn managed_auth_requirements_fail_closed_for_standalone_app_server() -> Result<(
                 "CODEX_APP_SERVER_MANAGED_CONFIG_PATH",
                 codex_home.path().join("managed_config.toml"),
             )
-            .args(["--listen", "off"])
+            .args(["-c", "model_provider=\"openai\"", "--listen", "off"])
             .output()?;
 
         assert!(!output.status.success());

@@ -40,7 +40,7 @@ common:windows --test_env=WINDIR
 # Rust's libtest harness runs test bodies on std-spawned threads. The default
 # 2 MiB stack can be too small for large async test futures on Windows CI; see
 # https://github.com/openai/codex/pull/19067 for the motivating failure.
-common --test_env=RUST_MIN_STACK=8388608 # 8 MiB
+common --test_env=RUST_MIN_STACK=16777216 # 16 MiB for large async test fixtures
 
 common --test_output=errors
 common --nobuild_runfile_links

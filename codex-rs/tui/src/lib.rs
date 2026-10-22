@@ -645,19 +645,67 @@ pub(crate) async fn start_app_server_for_picker(
 }
 
 #[cfg(test)]
+fn test_responses_config(config: &Config) -> Config {
+    let mut config = config.clone();
+    if config.model_provider_id == "xenolith"
+        && config
+            .config_layer_stack
+            .effective_config()
+            .get("model_provider")
+            .is_none()
+    {
+        config.model_provider_id = "openai".to_string();
+        config.model_provider =
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)["openai"]
+                .clone();
+    }
+    config
+}
+
+#[cfg(test)]
+fn test_provider_cli_overrides(config: &Config) -> Vec<(String, toml::Value)> {
+    if config
+        .config_layer_stack
+        .get_active_user_layer()
+        .is_some_and(|layer| {
+            matches!(&layer.name, codex_config::ConfigLayerSource::User { file, profile: None }
+                if file == &config.codex_home.join("config.toml"))
+                && layer
+                    .config
+                    .get("model_provider")
+                    .and_then(toml::Value::as_str)
+                    == Some(config.model_provider_id.as_str())
+        })
+    {
+        return Vec::new();
+    }
+    let mut overrides = vec![(
+        "model_provider".to_string(),
+        config.model_provider_id.clone().into(),
+    )];
+    if !codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+        .contains_key(&config.model_provider_id)
+    {
+        overrides.push((
+            format!("model_providers.{}", config.model_provider_id),
+            toml::Value::try_from(&config.model_provider).expect("serialize fixture provider"),
+        ));
+    }
+    overrides
+}
+
+#[cfg(test)]
 pub(crate) async fn start_embedded_app_server_for_picker(
     config: &Config,
 ) -> color_eyre::Result<AppServerSession> {
+    let config = test_responses_config(config);
     let mut target = AppServerTarget::Embedded;
-    let mut state_db = init_state_db_for_app_server_target(config, &target).await?;
+    let mut state_db = init_state_db_for_app_server_target(&config, &target).await?;
     let app_server = start_app_server(
         &mut target,
         Arg0DispatchPaths::default(),
         config.clone(),
-        vec![(
-            "model_provider".to_string(),
-            config.model_provider_id.clone().into(),
-        )],
+        test_provider_cli_overrides(&config),
         LoaderOverrides::without_managed_config_for_tests(),
         /*strict_config*/ false,
         CloudConfigBundleLoader::default(),
@@ -2468,8 +2516,10 @@ pub(crate) mod tests {
             .await?;
         if config.model_provider_id == "xenolith" {
             config.model_provider_id = "openai".to_string();
-            config.model_provider =
-                codex_model_provider_info::built_in_model_providers(None)["openai"].clone();
+            config.model_provider = codex_model_provider_info::built_in_model_providers(
+                /*openai_base_url*/ None,
+            )["openai"]
+                .clone();
         }
         Ok(config)
     }
@@ -2764,10 +2814,11 @@ requires_openai_auth = {requires_openai_auth}
     ) -> color_eyre::Result<InProcessAppServerClient> {
         let state_db =
             init_state_db_for_app_server_target(&config, &AppServerTarget::Embedded).await?;
+        let provider_override = test_provider_cli_overrides(&config);
         start_embedded_app_server(
             Arg0DispatchPaths::default(),
             config,
-            Vec::new(),
+            provider_override,
             LoaderOverrides::default(),
             /*strict_config*/ false,
             CloudConfigBundleLoader::default(),
@@ -2801,7 +2852,7 @@ requires_openai_auth = {requires_openai_auth}
             std::fs::create_dir_all(&explicit_cwd)?;
             std::fs::write(
                 codex_home.join("config.toml"),
-                format!("[tui]\nresume_cwd = \"{configured_mode}\"\n"),
+                format!("model_provider = \"openai\"\n[tui]\nresume_cwd = \"{configured_mode}\"\n"),
             )?;
             let cwd_override = has_explicit_cwd.then_some(explicit_cwd.as_path());
             let config = ConfigBuilder::default()
@@ -3484,6 +3535,7 @@ requires_openai_auth = {requires_openai_auth}
         )?;
 
         let mut config = ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(temp_dir.path().to_path_buf())
             .harness_overrides(ConfigOverrides {
                 cwd: Some(project_cwd.clone()),
@@ -3583,6 +3635,7 @@ requires_openai_auth = {requires_openai_auth}
         let project_cwd = temp_dir.path().join("project");
         std::fs::create_dir_all(&project_cwd)?;
         let config = ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(temp_dir.path().to_path_buf())
             .harness_overrides(ConfigOverrides {
                 cwd: Some(project_cwd.clone()),

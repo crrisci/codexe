@@ -1353,7 +1353,7 @@ async fn login_amazon_bedrock_replaces_primary_auth_and_persists_provider(
             GetAccountResponse {
                 workspace_routing: None,
                 account: None,
-                requires_openai_auth: true,
+                requires_openai_auth: !cfg!(unix),
             }
         );
     }

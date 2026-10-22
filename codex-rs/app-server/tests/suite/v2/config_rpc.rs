@@ -557,6 +557,7 @@ async fn config_read_returns_effective_and_layers() -> Result<()> {
     write_config(
         &codex_home,
         r#"
+model_provider = "openai"
 model = "gpt-user"
 sandbox_mode = "workspace-write"
 "#,
@@ -607,6 +608,7 @@ async fn config_read_includes_tools() -> Result<()> {
     write_config(
         &codex_home,
         r#"
+model_provider = "openai"
 model = "gpt-user"
 
 [tools.web_search]
@@ -1066,6 +1068,7 @@ async fn config_read_includes_apps() -> Result<()> {
     write_config(
         &codex_home,
         r#"
+model_provider = "openai"
 [apps._default]
 approvals_reviewer = "auto_review"
 default_tools_approval_mode = "writes"
@@ -1435,6 +1438,7 @@ async fn config_read_includes_system_layer_and_overrides() -> Result<()> {
         &codex_home,
         &format!(
             r#"
+model_provider = "openai"
 model = "gpt-user"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"

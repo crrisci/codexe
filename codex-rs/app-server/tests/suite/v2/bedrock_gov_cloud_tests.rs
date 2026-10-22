@@ -46,6 +46,10 @@ async fn checks_current_provider_after_login_without_restart() -> Result<()> {
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::default(),
     )?;
+    std::fs::write(
+        home.path().join("config.toml"),
+        "model_provider = 'openai'\n",
+    )?;
     let mut server = TestAppServer::builder()
         .with_codex_home(home.path())
         .build_initialized()

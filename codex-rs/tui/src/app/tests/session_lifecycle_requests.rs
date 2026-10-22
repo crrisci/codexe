@@ -441,13 +441,14 @@ pub(super) async fn start_recording_app_server_with_realtime_speech(
     realtime_behavior: RealtimeRequestBehavior,
     loader_overrides: LoaderOverrides,
 ) -> Result<RecordingAppServer> {
+    let config = crate::test_responses_config(config);
     let state_db =
-        crate::init_state_db_for_app_server_target(config, &crate::AppServerTarget::Embedded)
+        crate::init_state_db_for_app_server_target(&config, &crate::AppServerTarget::Embedded)
             .await?;
     let mut embedded = crate::start_embedded_app_server(
         codex_arg0::Arg0DispatchPaths::default(),
         config.clone(),
-        Vec::new(),
+        crate::test_provider_cli_overrides(&config),
         loader_overrides,
         /*strict_config*/ false,
         codex_config::CloudConfigBundleLoader::default(),
@@ -3548,7 +3549,10 @@ async fn managed_worktree_transitions_bind_owner_and_preserve_only_fork_history(
     let project_pool = dunce::canonicalize(root.path())?.join("project-pool");
     fs::create_dir_all(&home)?;
     fs::create_dir_all(source.join(".codex"))?;
-    fs::write(home.join("config.toml"), "[features]\nworktrees = true\n")?;
+    fs::write(
+        home.join("config.toml"),
+        "model_provider = \"openai\"\n[features]\nworktrees = true\n",
+    )?;
     crate::legacy_core::config::set_project_trust_level(
         &home,
         &source,
@@ -3630,7 +3634,11 @@ model_reasoning_effort = "low"
     let contents = fs::read_to_string(&host_config)?;
     fs::write(
         host_config,
-        format!("model_provider = \"ollama\"\n{contents}"),
+        contents.replacen(
+            "model_provider = \"openai\"",
+            "model_provider = \"ollama\"",
+            1,
+        ),
     )?;
     let original = app.chat_widget.thread_id().expect("original thread");
     server.thread_inject_items(original, vec![serde_json::from_value(serde_json::json!({
@@ -4102,6 +4110,10 @@ async fn changing_directory_preserves_project_trust_permissions_history_and_hook
     app.config.codex_home = codex_home.path().to_path_buf().abs();
     app.config.sqlite = SqliteConfig::new_for_testing(codex_home.path().abs());
     app.harness_overrides.permission_profile = Some(PermissionProfile::workspace_write());
+    fs::write(
+        codex_home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )?;
     let names = ["root", "trusted", "unknown", "untrusted", "p", "failure"];
     let [current, trusted, unknown, untrusted, mismatch, failed] =
         names.map(|name| codex_home.path().join(name));

@@ -667,6 +667,7 @@ async fn command_center_new_preserves_only_selected_server_profiles() -> Result<
         "approval_policy = \"never\"\napprovals_reviewer = \"auto_review\"\ndefault_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
     )?;
     let server_config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(home.path().into())
         .build()
         .await?;
@@ -679,7 +680,7 @@ async fn command_center_new_preserves_only_selected_server_profiles() -> Result<
     let client = crate::start_embedded_app_server(
         codex_arg0::Arg0DispatchPaths::default(),
         server_config,
-        Vec::new(),
+        vec![("model_provider".to_string(), "openai".into())],
         LoaderOverrides::default(),
         /*strict_config*/ false,
         CloudConfigBundleLoader::default(),
@@ -1095,7 +1096,7 @@ async fn command_center_new_checkout_and_worktree_preserve_source_and_default_br
         std::fs::write(
             home.join("config.toml"),
             format!(
-                "approvals_reviewer = \"auto_review\"\nsandbox_mode = \"workspace-write\"\napproval_policy = \"on-request\"\nwindows.sandbox = \"unelevated\"\n[projects.{:?}]\ntrust_level = \"trusted\"\n",
+                "model_provider = \"openai\"\napprovals_reviewer = \"auto_review\"\nsandbox_mode = \"workspace-write\"\napproval_policy = \"on-request\"\nwindows.sandbox = \"unelevated\"\n[projects.{:?}]\ntrust_level = \"trusted\"\n",
                 codex_config::loader::project_trust_key(&source),
             ),
         )?;

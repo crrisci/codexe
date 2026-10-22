@@ -298,9 +298,9 @@ requires_openai_auth = false
         std::fs::write(
             server_home.path().join("config.toml"),
             if choice == "managed" {
-                ""
+                "model_provider = \"openai\"\n"
             } else {
-                "model = \"server-model\"\nmodel_reasoning_effort = \"high\"\n"
+                "model_provider = \"openai\"\nmodel = \"server-model\"\nmodel_reasoning_effort = \"high\"\n"
             },
         )?;
         if managed {

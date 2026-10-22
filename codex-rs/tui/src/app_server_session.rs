@@ -2641,6 +2641,10 @@ mod tests {
 
     async fn build_config(temp_dir: &TempDir) -> Config {
         ConfigBuilder::default()
+            .harness_overrides(crate::legacy_core::config::ConfigOverrides {
+                model_provider: Some("openai".to_string()),
+                ..Default::default()
+            })
             .codex_home(temp_dir.path().to_path_buf())
             .build()
             .await

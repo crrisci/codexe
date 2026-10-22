@@ -72,6 +72,7 @@ fn personal_access_token_exec_command(server: &MockServer, home: &TempDir) -> Co
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
     cmd.arg("exec")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/api/codex\"", server.uri()))
@@ -231,6 +232,7 @@ async fn responses_mode_stream_cli() {
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
     cmd.arg("exec")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(&provider_override)
@@ -273,6 +275,7 @@ async fn responses_mode_stream_cli_supports_openai_base_url_config_override() {
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
     cmd.arg("exec")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
@@ -325,6 +328,7 @@ async fn exec_cli_applies_model_instructions_file() {
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
     cmd.arg("exec")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("--model")
         .arg("gpt-5.5")
@@ -392,6 +396,7 @@ async fn exec_cli_profile_applies_model_instructions_file() {
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
     cmd.arg("exec")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("--model")
         .arg("gpt-5.5")
@@ -434,6 +439,7 @@ async fn responses_api_stream_cli() {
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
     cmd.arg("exec")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
@@ -475,6 +481,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     let bin = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd = Command::new(bin);
     cmd.arg("exec")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))
@@ -591,6 +598,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     let bin2 = codex_utils_cargo_bin::cargo_bin("codex").unwrap();
     let mut cmd2 = Command::new(bin2);
     cmd2.arg("exec")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("-c")
         .arg(format!("openai_base_url=\"{}/v1\"", server.uri()))

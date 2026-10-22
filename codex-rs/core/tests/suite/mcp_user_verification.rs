@@ -72,7 +72,9 @@ async fn mcp_user_verification_rejects_configured_servers(source: CapabilitySour
     skip_if_no_network!(Ok(()));
     skip_if_wine_exec!(Ok(()), "the MCP fixture requires a host Python interpreter");
     let server = responses::start_mock_server().await;
-    let test = test_codex().build_with_auto_env(&server).await?;
+    let test = test_codex()
+        .build_with_remote_and_local_env(&server)
+        .await?;
     let declarations = HashMap::from([(
         OPENAI_ELICITATION_EXTENSION_ID.to_string(),
         json!({"userVerification": {}}),

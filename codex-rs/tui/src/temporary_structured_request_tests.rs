@@ -76,6 +76,7 @@ async fn managed_workspace_default_respects_read_only_availability() -> color_ey
             ..LoaderOverrides::without_managed_config_for_tests()
         };
         let config = ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(codex_home.path().to_path_buf())
             .fallback_cwd(Some(codex_home.path().to_path_buf()))
             .loader_overrides(loader_overrides.clone())

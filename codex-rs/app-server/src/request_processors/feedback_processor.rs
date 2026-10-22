@@ -553,7 +553,7 @@ mod tests {
         )
         .await;
 
-        assert_eq!(cwd, test.cwd_path());
+        assert_eq!(cwd, test.config.cwd.to_path_buf());
         Ok(())
     }
 

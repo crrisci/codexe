@@ -963,7 +963,7 @@ client_id = "mcp-client"
         )?;
         let config_manager = ConfigManager::new_for_tests(
             home.path().to_path_buf(),
-            Vec::new(),
+            vec![("model_provider".to_string(), "openai".into())],
             LoaderOverrides::with_managed_config_path_for_tests(managed_config_path),
             CloudConfigBundleLoader::default(),
         );

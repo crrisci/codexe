@@ -134,7 +134,7 @@ async fn interrupt_aborts_server_initiated_mcp_guardian_review() -> Result<()> {
             .set(mcp_servers)
             .expect("set MCP fixture");
     });
-    let test = builder.build_with_auto_env(&server).await?;
+    let test = builder.build_with_remote_and_local_env(&server).await?;
     wait_for_mcp_server(&test.codex, "elicitation").await?;
     responses::mount_sse_once(
         &server,
@@ -300,7 +300,7 @@ async fn server_initiated_mcp_elicitation_can_require_synchronous_auto_review(
                 .set(mcp_servers)
                 .expect("set MCP fixture");
         });
-    let test = builder.build_with_auto_env(&server).await?;
+    let test = builder.build_with_remote_and_local_env(&server).await?;
     wait_for_mcp_server(&test.codex, "elicitation").await?;
     responses::mount_sse_once(
         &server,
@@ -514,7 +514,7 @@ async fn node_elicitations_attribute_independent_reviews_without_changing_action
             .set(mcp_servers)
             .expect("set MCP fixture");
     });
-    let test = builder.build_with_auto_env(&server).await?;
+    let test = builder.build_with_remote_and_local_env(&server).await?;
     wait_for_mcp_server(&test.codex, server_name).await?;
     if matches!(
         call_id_source,
@@ -767,7 +767,7 @@ async fn strict_browser_nested_review_requires_live_browser_identity(
             config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
             config.approvals_reviewer = ApprovalsReviewer::User;
         });
-    let test = builder.build_with_auto_env(&server).await?;
+    let test = builder.build_with_remote_and_local_env(&server).await?;
     wait_for_mcp_server(&test.codex, "codex_apps").await?;
     responses::mount_sse_once(
         &server,
@@ -860,7 +860,7 @@ async fn user_review_preserves_unsupported_guardian_elicitations(mode: &str) -> 
                 .set(mcp_servers)
                 .expect("set MCP fixture");
         })
-        .build_with_auto_env(&server)
+        .build_with_remote_and_local_env(&server)
         .await?;
     wait_for_mcp_server(&test.codex, "elicitation").await?;
     responses::mount_sse_once(
@@ -968,7 +968,7 @@ async fn yielded_code_mode_elicitation_keeps_live_invocation_metadata() -> Resul
             config.approvals_reviewer = ApprovalsReviewer::User;
             config.mcp_servers.set(mcp_servers).unwrap();
         });
-    let test = builder.build_with_auto_env(&server).await?;
+    let test = builder.build_with_remote_and_local_env(&server).await?;
     wait_for_mcp_server(&test.codex, "node_repl").await?;
     let barrier = r#"await tools.test_sync_tool({barrier: {
         id: "elicitation-origin", participants: 2, timeout_ms: 60000

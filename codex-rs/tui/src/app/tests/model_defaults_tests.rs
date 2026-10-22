@@ -99,7 +99,7 @@ async fn model_default_saves_report_server_outcomes_and_target_server_profile() 
         loader_overrides.user_config_path =
             Some(AbsolutePathBuf::from_absolute_path(&profile_path)?);
         loader_overrides.user_config_profile = Some("work".parse()?);
-        let overrides = if outcome == "overridden" {
+        let mut overrides = if outcome == "overridden" {
             vec![
                 ("model".into(), toml::Value::String("gpt-5.6-terra".into())),
                 (
@@ -115,6 +115,7 @@ async fn model_default_saves_report_server_outcomes_and_target_server_profile() 
         } else {
             Vec::new()
         };
+        overrides.push(("model_provider".into(), "openai".into()));
         let config = ConfigBuilder::default()
             .codex_home(server_home.path().to_path_buf())
             .cli_overrides(overrides.clone())

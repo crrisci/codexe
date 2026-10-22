@@ -6777,6 +6777,7 @@ async fn responses_websocket_features_do_not_change_wire_api() -> std::io::Resul
         let mut entries = BTreeMap::new();
         entries.insert(feature_key.to_string(), true);
         let cfg = ConfigToml {
+            model_provider: Some("openai".to_string()),
             features: Some(FeaturesToml::from(entries)),
             ..Default::default()
         };

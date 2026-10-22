@@ -365,7 +365,10 @@ async fn status_snapshot_shows_chatgpt_plan_without_email() {
         .await;
     std::fs::write(
         &profile_path,
-        format!("chatgpt_base_url = '{}'", server.uri()),
+        format!(
+            "model_provider = 'openai'\nchatgpt_base_url = '{}'",
+            server.uri()
+        ),
     )
     .expect("configure local ChatGPT fixture");
     let mut config = test_config(&temp_home).await;

@@ -35,6 +35,7 @@ async fn bedrock_app_server(
     let aws_credentials_path = aws_credentials.to_string_lossy();
     TestAppServer::builder()
         .with_codex_home(codex_home)
+        .with_args(&["-c", "model_provider=\"amazon-bedrock\""])
         .with_env_overrides(&[
             ("AWS_CONFIG_FILE", Some(aws_config_path.as_ref())),
             (

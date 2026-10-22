@@ -35,6 +35,16 @@ async fn root_metadata_symlinks_cannot_reopen_approved_denials() {
     fs::write(private.join("sibling"), "sibling").unwrap();
     codex_utils_cargo_bin::copy_executable(&codex_linux_sandbox_exe(), &work.join("sandbox"))
         .unwrap();
+    // Approved full-disk policies intentionally reject mutable PATH executables.
+    // Exercise the same bundled fallback layout used by the distributed sandbox.
+    let bundled_bwrap = if option_env!("BAZEL_PACKAGE").is_some() {
+        codex_utils_cargo_bin::cargo_bin("bwrap").expect("Bazel bubblewrap runfile")
+    } else {
+        bwrap.clone()
+    };
+    let resources = work.join("codex-resources");
+    fs::create_dir(&resources).unwrap();
+    codex_utils_cargo_bin::copy_executable(&bundled_bwrap, &resources.join("bwrap")).unwrap();
 
     let path_entry = |path: &str, access| {
         FileSystemSandboxEntry::new(

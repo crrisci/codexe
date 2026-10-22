@@ -66,6 +66,7 @@ async fn installed_extension_exposes_and_invokes_history_notes_tools() -> TestRe
         .await;
     let codex_home = TempDir::new()?;
     let mut config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .codex_home(codex_home.path().to_path_buf())
         .build()

@@ -410,7 +410,9 @@ jobs:
           "${test_command[@]}"
         env:
           RUST_BACKTRACE: 1
-          RUST_MIN_STACK: "8388608" # 8 MiB
+          # Keep ordinary error Debug output stable; panic backtraces remain enabled.
+          RUST_LIB_BACKTRACE: "0"
+          RUST_MIN_STACK: "16777216" # 16 MiB for large async test fixtures
           NEXTEST_STATUS_LEVEL: leak
 
       - name: Upload nextest JUnit report

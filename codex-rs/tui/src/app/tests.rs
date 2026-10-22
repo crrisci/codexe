@@ -8090,7 +8090,7 @@ async fn in_app_resume_uses_configured_or_explicit_cwd() -> Result<()> {
     ] {
         std::fs::write(
             codex_home.join("config.toml"),
-            format!("[tui]\nresume_cwd = \"{configured_mode}\"\n"),
+            format!("model_provider = \"openai\"\n[tui]\nresume_cwd = \"{configured_mode}\"\n"),
         )?;
         for cwd in [
             &launch_cwd,

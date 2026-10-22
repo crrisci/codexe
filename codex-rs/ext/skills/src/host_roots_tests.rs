@@ -406,7 +406,15 @@ async fn repo_ancestry_without_project_marker_does_not_walk_parents() {
     fs::create_dir_all(outer.join(".agents/skills")).expect("create outer skills");
     fs::create_dir_all(cwd.join(".agents/skills")).expect("create cwd skills");
 
-    let roots = repo_agents_skill_roots(Some(Arc::clone(&LOCAL_FS)), &stack(Vec::new()), &cwd)
+    // Do not let project markers outside this temporary tree influence the fixture.
+    let layer = ConfigLayerEntry::new(
+        user_layer(&outer).name,
+        toml::toml! {
+            project_root_markers = [".codex-no-project-marker-fixture"]
+        }
+        .into(),
+    );
+    let roots = repo_agents_skill_roots(Some(Arc::clone(&LOCAL_FS)), &stack(vec![layer]), &cwd)
         .await
         .into_iter()
         .map(|root| root.path)

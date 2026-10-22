@@ -83,7 +83,7 @@ async fn user_reload_promotes_plugin_and_feature_requirements_without_server_cha
     overrides.system_requirements_path = Some(requirements_path.clone());
     let manager = ConfigManager::new(
         home.path().to_path_buf(),
-        Vec::new(),
+        vec![("model_provider".to_string(), "openai".into())],
         overrides,
         /*strict_config*/ false,
         codex_config::CloudConfigBundleLoader::default(),
@@ -179,7 +179,7 @@ async fn mcp_refresh_rejects_superseded_app_server_policy(
         });
     let manager = ConfigManager::new(
         home.path().to_path_buf(),
-        Vec::new(),
+        vec![("model_provider".to_string(), "openai".into())],
         codex_config::LoaderOverrides::without_managed_config_for_tests(),
         /*strict_config*/ false,
         loader,

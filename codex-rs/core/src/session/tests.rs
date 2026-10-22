@@ -4933,6 +4933,7 @@ fn text_block(s: &str) -> serde_json::Value {
 async fn build_test_config(codex_home: &Path) -> Config {
     ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .harness_overrides(ConfigOverrides {
             model: Some("gpt-5.5".to_string()),
             ..Default::default()

@@ -3825,6 +3825,7 @@ mod tests {
             );
         }
         let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(root.path().to_path_buf())
             .build()
             .await
