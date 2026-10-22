@@ -89,7 +89,7 @@ pub fn app_server_json_shutdown_event(
 ) -> Result<Value> {
     std::fs::write(
         codex_home.join("config.toml"),
-        "[features]\nplugins = false\n",
+        "model_provider = \"openai\"\n[features]\nplugins = false\n",
     )?;
     let output = Command::new(codex_utils_cargo_bin::cargo_bin(binary)?)
         .stdin(Stdio::null())

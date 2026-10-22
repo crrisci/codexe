@@ -24,6 +24,10 @@ struct TestDaemon {
 impl TestDaemon {
     fn new() -> Result<Self> {
         let home = tempfile::Builder::new().tempdir_in("/tmp")?;
+        std::fs::write(
+            home.path().join("config.toml"),
+            "model_provider = \"openai\"\n",
+        )?;
         let codex = codex_utils_cargo_bin::cargo_bin("codex")?;
         let codex_source = std::fs::canonicalize(&codex)?;
         let target = if cfg!(target_os = "macos") {
@@ -592,10 +596,13 @@ fn packaged_daemon_launch(action: &str, initial: InitialDaemon) -> Result<()> {
     if initial == InitialDaemon::Missing {
         std::fs::remove_file(state.join("app-server.stderr.log"))?;
     }
-    std::fs::write(
-        state.join("settings.json"),
-        br#"{"shutdownGraceSeconds":0}"#,
-    )?;
+    let settings = if action == "bootstrap" {
+        // Bootstrap coverage should not start a release updater in this fixture.
+        br#"{"shutdownGraceSeconds":0,"updater":{"autoUpdateEnabled":false}}"#.as_slice()
+    } else {
+        br#"{"shutdownGraceSeconds":0}"#.as_slice()
+    };
+    std::fs::write(state.join("settings.json"), settings)?;
     let cli_before = daemon.codex.canonicalize()?;
     let result = daemon
         .command()

@@ -351,6 +351,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # TLS fixtures exercise native-backend fallback. Host CA overrides
+          # force rustls before the test starts; CA tests set their own inputs.
+          unset CODEX_CA_CERTIFICATE SSL_CERT_FILE
           archive_file="${RUNNER_TEMP}/nextest-archive/${NEXTEST_ARCHIVE_FILE}"
           workspace_root="$(pwd)"
 

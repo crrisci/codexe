@@ -1,0 +1,23 @@
+# Install dereferenced Opus headers so Bazel output trees are self-contained.
+
+--- a/opus/CMakeLists.txt
++++ b/opus/CMakeLists.txt
+@@ -620,6 +620,18 @@
+                         XCODE_ATTRIBUTE_INSTALL_PATH "@rpath"
+                         OUTPUT_NAME Opus)
+ endif()
++
++# Bazel presents source headers through symlinks. Stage their contents so
++# CMake installs regular files rather than links outside the output tree.
++get_target_property(opus_public_headers opus PUBLIC_HEADER)
++set(opus_install_headers "")
++foreach(opus_header IN LISTS opus_public_headers)
++  get_filename_component(opus_header_name "${opus_header}" NAME)
++  set(opus_install_header "${CMAKE_CURRENT_BINARY_DIR}/install-headers/${opus_header_name}")
++  configure_file("${opus_header}" "${opus_install_header}" COPYONLY)
++  list(APPEND opus_install_headers "${opus_install_header}")
++endforeach()
++set_target_properties(opus PROPERTIES PUBLIC_HEADER "${opus_install_headers}")
+ 
+ install(TARGETS opus
+         EXPORT OpusTargets
