@@ -3210,6 +3210,7 @@ async fn server_only_profile_selection_keeps_turns_on_the_selected_profile() -> 
         "default_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
     )?;
     let server_config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(home.path().into())
         .build()
         .await?;
@@ -8106,6 +8107,7 @@ async fn in_app_resume_uses_configured_or_explicit_cwd() -> Result<()> {
             .map_err(std::io::Error::other)?;
         }
         let config = ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(codex_home.clone())
             .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
             .harness_overrides(ConfigOverrides {
@@ -8242,6 +8244,7 @@ async fn remembered_current_cwd_stays_at_launch_across_in_app_resumes() -> Resul
     )
     .map_err(std::io::Error::other)?;
     let config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(codex_home.clone())
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .harness_overrides(ConfigOverrides {

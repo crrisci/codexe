@@ -1618,7 +1618,8 @@ async fn logout_managed_bedrock_restores_default_account(
         GetAccountResponse {
             workspace_routing: None,
             account: None,
-            requires_openai_auth: true,
+            // Unix restores the native provider without OpenAI authentication.
+            requires_openai_auth: !cfg!(unix),
         }
     );
     Ok(())
@@ -1722,7 +1723,8 @@ async fn logout_aws_managed_bedrock_clears_provider_and_restores_default_account
             GetAccountResponse {
                 workspace_routing: None,
                 account: None,
-                requires_openai_auth: true,
+                // Unix restores the native provider without OpenAI authentication.
+                requires_openai_auth: !cfg!(unix),
             }
         );
     }

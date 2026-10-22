@@ -310,8 +310,12 @@ try:
             interrupts += 1
             last_interrupt = now
     if child.poll() is None:
-        # Escalation targets only this fresh PTY process group, never the engine.
-        os.killpg(child.pid, signal.SIGKILL)
+        # PTY EOF can arrive before the process exit is observable on macOS.
+        try:
+            child.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            # Escalation targets only this fresh PTY process group, never the engine.
+            os.killpg(child.pid, signal.SIGKILL)
     code = child.wait(timeout=5)
     cancel_elapsed = None if cancel_started is None else time.monotonic() - cancel_started
 finally:

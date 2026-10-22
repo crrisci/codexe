@@ -290,7 +290,7 @@ async fn debug_prompt_input_follows_authenticated_attribution_setting() -> Resul
     std::fs::write(
         codex_home.path().join("config.toml"),
         format!(
-            "cli_auth_credentials_store = \"file\"\nchatgpt_base_url = \"{}/backend-api\"\n",
+            "model_provider = \"openai\"\ncli_auth_credentials_store = \"file\"\nchatgpt_base_url = \"{}/backend-api\"\n",
             server.uri()
         ),
     )?;

@@ -357,6 +357,7 @@ impl PtyCodex {
             .args(extra_args)
             .arg("-C")
             .arg(repo_root)
+            .env("RUST_BACKTRACE", "0")
             .env("TERM", "xterm-256color")
             // This PTY answers its own capability probes; it is not inside the caller's mux.
             .env_remove("TMUX")
