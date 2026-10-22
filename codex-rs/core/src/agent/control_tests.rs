@@ -144,6 +144,9 @@ async fn test_config_with_cli_overrides(
         "model".to_string(),
         TomlValue::String("gpt-5.5".to_string()),
     ));
+    if !cli_overrides.iter().any(|(key, _)| key == "model_provider") {
+        cli_overrides.push(("model_provider".to_string(), "openai".into()));
+    }
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(home.path().to_path_buf())
         .cli_overrides(cli_overrides)

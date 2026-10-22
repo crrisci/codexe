@@ -10,6 +10,7 @@ path = "src/lib.rs"
 doctest = false
 
 [features]
+default = ["sandbox"]
 sandbox = ["v8/v8_enable_sandbox"]
 
 [lints]

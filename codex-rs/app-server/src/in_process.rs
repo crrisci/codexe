@@ -843,6 +843,7 @@ mod tests {
 
     async fn build_test_config(codex_home: &Path) -> Config {
         match ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(codex_home.to_path_buf())
             .build()
             .await
@@ -850,7 +851,7 @@ mod tests {
             Ok(config) => config,
             Err(_) => Config::load_default_with_cli_overrides_for_codex_home(
                 codex_home.to_path_buf(),
-                Vec::new(),
+                vec![("model_provider".to_string(), "openai".into())],
             )
             .await
             .expect("default config should load"),

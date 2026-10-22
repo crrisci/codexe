@@ -263,6 +263,12 @@ if [[ "${RUNNER_OS:-}" == "Windows" && $windows_cross_compile -eq 1 && -z "${BUI
 fi
 
 post_config_bazel_args=()
+if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]; then
+  # Public runners build locally: avoid keeping a second copy of every action
+  # output in the disk cache, which exhausts the ephemeral runner filesystem.
+  post_config_bazel_args+=(--disk_cache= --jobs=8)
+fi
+
 if [[ "${RUNNER_OS:-}" == "Windows" && $windows_msvc_host_platform -eq 1 ]]; then
   has_host_platform_override=0
   for arg in "${bazel_args[@]}"; do
@@ -278,6 +284,14 @@ if [[ "${RUNNER_OS:-}" == "Windows" && $windows_msvc_host_platform -eq 1 ]]; the
     # Callers that need a different Windows target platform should pass an
     # explicit `--platforms=...` flag.
     post_config_bazel_args+=("--host_platform=//:local_windows_msvc")
+    if [[ -z "${BUILDBUDDY_API_KEY:-}" ]]; then
+      # Hermetic LLVM emits MinGW objects on Windows. MSVC Rust binaries and
+      # proc-macros need C dependencies built with the installed MSVC compiler.
+      post_config_bazel_args+=(
+        --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=0
+        --extra_toolchains=@local_config_cc//:cc-toolchain-x64_windows
+      )
+    fi
   fi
 fi
 

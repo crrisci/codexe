@@ -231,6 +231,7 @@ allow_local_binding = true
 #[cfg(target_os = "linux")]
 fn default_test_overrides() -> ConfigOverrides {
     ConfigOverrides {
+        model_provider: Some("openai".to_string()),
         codex_linux_sandbox_exe: Some(
             find_codex_linux_sandbox_exe().expect("should find binary for codex-linux-sandbox"),
         ),
@@ -240,7 +241,10 @@ fn default_test_overrides() -> ConfigOverrides {
 
 #[cfg(not(target_os = "linux"))]
 fn default_test_overrides() -> ConfigOverrides {
-    ConfigOverrides::default()
+    ConfigOverrides {
+        model_provider: Some("openai".to_string()),
+        ..ConfigOverrides::default()
+    }
 }
 
 #[cfg(target_os = "linux")]

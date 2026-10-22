@@ -315,6 +315,7 @@ pub(crate) async fn test_config() -> Config {
     Config::load_from_base_config_with_overrides(
         ConfigToml {
             model: Some("gpt-5.5".to_string()),
+            model_provider: Some("openai".to_string()),
             ..Default::default()
         },
         ConfigOverrides::default(),

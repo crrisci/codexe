@@ -562,7 +562,7 @@ crate.annotation(
     },
     crate = "v8",
     # Keep the Rust feature aligned with the source-built Bazel artifacts.
-    # Windows MSVC still consumes upstream non-sandboxed prebuilts.
+    # Windows MSVC consumes the same sandbox-enabled Codex release artifacts.
     crate_features_select = {
         "aarch64-apple-darwin": ["v8_enable_sandbox"],
         "aarch64-pc-windows-gnullvm": ["v8_enable_sandbox"],
