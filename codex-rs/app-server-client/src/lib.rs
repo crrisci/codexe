@@ -889,7 +889,7 @@ mod tests {
         let client = InProcessAppServerClient::start(InProcessClientStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
             config,
-            cli_overrides: Vec::new(),
+            cli_overrides: vec![("model_provider".to_string(), "openai".into())],
             loader_overrides: LoaderOverrides::default(),
             strict_config: false,
             cloud_config_bundle: CloudConfigBundleLoader::default(),
@@ -2106,7 +2106,7 @@ mod tests {
         let runtime_args = InProcessClientStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
             config: config.clone(),
-            cli_overrides: Vec::new(),
+            cli_overrides: vec![("model_provider".to_string(), "openai".into())],
             loader_overrides: LoaderOverrides::default(),
             strict_config: false,
             cloud_config_bundle: CloudConfigBundleLoader::default(),

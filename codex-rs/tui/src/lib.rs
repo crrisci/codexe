@@ -654,7 +654,10 @@ pub(crate) async fn start_embedded_app_server_for_picker(
         &mut target,
         Arg0DispatchPaths::default(),
         config.clone(),
-        Vec::new(),
+        vec![(
+            "model_provider".to_string(),
+            config.model_provider_id.clone().into(),
+        )],
         LoaderOverrides::without_managed_config_for_tests(),
         /*strict_config*/ false,
         CloudConfigBundleLoader::default(),
@@ -2458,11 +2461,17 @@ pub(crate) mod tests {
     }
 
     async fn build_config(temp_dir: &TempDir) -> std::io::Result<Config> {
-        ConfigBuilder::default()
+        let mut config = ConfigBuilder::default()
             .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
             .codex_home(temp_dir.path().to_path_buf())
             .build()
-            .await
+            .await?;
+        if config.model_provider_id == "xenolith" {
+            config.model_provider_id = "openai".to_string();
+            config.model_provider =
+                codex_model_provider_info::built_in_model_providers(None)["openai"].clone();
+        }
+        Ok(config)
     }
 
     #[tokio::test]

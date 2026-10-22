@@ -103,6 +103,7 @@ fn local_daemon_version_notice_snapshot() {
 async fn test_config() -> Config {
     let codex_home = std::env::temp_dir();
     ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(codex_home.clone())
         .build()
         .await

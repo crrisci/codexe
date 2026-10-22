@@ -1223,6 +1223,7 @@ mod tests {
         let codex_home = TempDir::new().unwrap();
         let codex_home_path = codex_home.path().to_path_buf();
         let config = ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(codex_home_path.clone())
             .build()
             .await
@@ -1231,7 +1232,7 @@ mod tests {
         let client = InProcessAppServerClient::start(InProcessClientStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
             config: Arc::new(config),
-            cli_overrides: Vec::new(),
+            cli_overrides: vec![("model_provider".to_string(), "openai".into())],
             loader_overrides: Default::default(),
             strict_config: false,
             cloud_config_bundle: cloud_config_bundle_loader_for_storage(
