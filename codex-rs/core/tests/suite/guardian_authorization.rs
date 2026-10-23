@@ -22,6 +22,7 @@ use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::request_user_input::RequestUserInputAnswer;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_protocol::user_input::UserInput;
+use codex_utils_absolute_path::test_support::PathExt;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
@@ -171,7 +172,7 @@ async fn guardian_revalidates_owning_session_before_allow(
             }
         })
         .with_code_mode_host_program(codex_utils_cargo_bin::cargo_bin("codex-code-mode-host")?)
-        .build_with_auto_env(&server)
+        .build_with_remote_and_local_env(&server)
         .await?;
     if review_mode == GuardianContextMode::Legacy {
         test.codex.ensure_rollout_materialized().await;
@@ -200,7 +201,7 @@ async fn guardian_revalidates_owning_session_before_allow(
                 text_elements: Vec::new(),
             }])
             .with_thread_settings(ThreadSettingsOverrides {
-                environments: Some(local_requests(test.config.cwd.clone())),
+                environments: Some(local_requests(test.cwd_path().abs())),
                 ..Default::default()
             }),
         )

@@ -4648,7 +4648,9 @@ async fn start_remote_streamable_http_test_server(
     )?;
     let bound_addr_file = format!("{remote_path}.addr");
     let log_file = format!("{remote_path}.log");
+    let container_ip = remote_container_ip(container_name)?;
     let mut env_assignments = vec![
+        format!("MCP_TEST_ALLOWED_HOST={}", sh_single_quote(&container_ip)),
         format!(
             "MCP_STREAMABLE_HTTP_BIND_ADDR={}",
             sh_single_quote("0.0.0.0:0")
@@ -4693,7 +4695,6 @@ async fn start_remote_streamable_http_test_server(
     let remote_bind_addr =
         wait_for_remote_bound_addr(container_name, &bound_addr_file, Duration::from_secs(5))
             .await?;
-    let container_ip = remote_container_ip(container_name)?;
     let server_url = format!("http://{}:{}/mcp", container_ip, remote_bind_addr.port());
     // The orchestrator can see the Docker container IP, but the behavior under
     // test is whether the remote-side MCP client can reach it. Probe through

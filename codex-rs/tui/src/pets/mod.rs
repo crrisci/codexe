@@ -347,30 +347,39 @@ mod tests {
     #[test]
     fn kitty_local_file_pet_image_uses_file_reference_without_inline_payload() {
         let dir = tempfile::tempdir().unwrap();
-        let frame = dir.path().join("frame.png");
-        std::fs::write(&frame, b"png").unwrap();
-        let request = AmbientPetDraw {
-            frame,
-            protocol: ImageProtocol::KittyLocalFile,
-            x: 2,
-            y: 3,
-            clear_top_y: 3,
-            columns: 4,
-            rows: 2,
-            height_px: 75,
-            sixel_dir: PathBuf::new(),
-        };
-        let mut output = Vec::new();
-        let mut state = PetImageRenderState::default();
+        // Vary the path length so each base64 alignment is exercised.
+        for filename in ["frame.png", "frame1.png", "frame12.png"] {
+            let frame = dir.path().join(filename);
+            std::fs::write(&frame, b"png").unwrap();
+            let canonical = frame.canonicalize().unwrap();
+            let payload = base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                canonical.to_string_lossy().as_bytes(),
+            );
+            let request = AmbientPetDraw {
+                frame,
+                protocol: ImageProtocol::KittyLocalFile,
+                x: 2,
+                y: 3,
+                clear_top_y: 3,
+                columns: 4,
+                rows: 2,
+                height_px: 75,
+                sixel_dir: PathBuf::new(),
+            };
+            let mut output = Vec::new();
+            let mut state = PetImageRenderState::default();
 
-        render_ambient_pet_image(&mut output, &mut state, Some(request)).unwrap();
+            render_ambient_pet_image(&mut output, &mut state, Some(request)).unwrap();
 
-        let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("a=d,d=I,i=49374,q=2;"));
-        assert!(output.contains("\x1b[4;3H"));
-        assert!(output.contains("a=T,t=f,f=100,c=4,r=2,q=2,i=49374;"));
-        assert!(!output.contains("cG5n"));
-        assert!(output.contains("\x1b8"));
+            let output = String::from_utf8(output).unwrap();
+            assert!(output.contains("a=d,d=I,i=49374,q=2;"));
+            assert!(output.contains("\x1b[4;3H"));
+            assert!(output.contains("a=T,t=f,f=100,c=4,r=2,q=2,i=49374;"));
+            assert!(output.contains(&format!("a=T,t=f,f=100,c=4,r=2,q=2,i=49374;{payload}")));
+            assert!(!output.contains("t=d,"));
+            assert!(output.contains("\x1b8"));
+        }
     }
 
     #[test]

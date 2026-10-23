@@ -11,6 +11,7 @@ use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::ThreadSettingsOverrides;
 use codex_protocol::user_input::UserInput;
+use codex_utils_absolute_path::test_support::PathExt;
 use core_test_support::responses;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -66,7 +67,7 @@ async fn cancelling_tool_aborts_its_guardian_review(cancellation: Cancellation) 
         builder = builder
             .with_code_mode_host_program(codex_utils_cargo_bin::cargo_bin("codex-code-mode-host")?);
     }
-    let test = builder.build_with_auto_env(&server).await?;
+    let test = builder.build_with_remote_and_local_env(&server).await?;
     let output_file = test.cwd.path().join("cancelled-guardian-command.txt");
     let output_path = shlex::try_join([output_file.to_string_lossy().as_ref()])?;
     let tool_args = json!({
@@ -159,7 +160,7 @@ async fn cancelling_tool_aborts_its_guardian_review(cancellation: Cancellation) 
                 text_elements: Vec::new(),
             }])
             .with_thread_settings(ThreadSettingsOverrides {
-                environments: Some(local_requests(test.config.cwd.clone())),
+                environments: Some(local_requests(test.cwd_path().abs())),
                 ..Default::default()
             }),
         )

@@ -125,7 +125,7 @@ async fn concurrent_connections_export_their_own_storage_originator() -> Result<
     let codex_home = TempDir::new()?;
     std::fs::write(
         codex_home.path().join("config.toml"),
-        "cli_auth_credentials_store = \"file\"\n",
+        "model_provider = \"openai\"\ncli_auth_credentials_store = \"file\"\n",
     )?;
     let collector = configure_collector(codex_home.path()).await?;
     let (_process, address) = spawn_websocket_server(codex_home.path()).await?;

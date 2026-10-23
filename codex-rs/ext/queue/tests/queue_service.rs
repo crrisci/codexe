@@ -741,7 +741,9 @@ async fn rejected_queue_messages_are_consumed_without_retrying_or_blocking_follo
         .with_pre_build_hook(write_rejecting_prompt_hook)
         .with_config(trust_discovered_hooks)
         .with_config(|config| config.include_environment_context = false)
-        .build_with_auto_env(&server)
+        // This queue-admission fixture runs Python hooks from the host's CODEX_HOME.
+        // Keep their command cwd on that host rather than in the remote executor.
+        .build(&server)
         .await?;
     let thread_id = test.session_configured.thread_id;
     let staging = QueuedItemService::new(
@@ -796,7 +798,9 @@ async fn explicitly_started_rejected_queue_messages_are_consumed() -> anyhow::Re
         .with_pre_build_hook(write_rejecting_prompt_hook)
         .with_config(trust_discovered_hooks)
         .with_config(|config| config.include_environment_context = false)
-        .build_with_auto_env(&server)
+        // This queue-admission fixture runs Python hooks from the host's CODEX_HOME.
+        // Keep their command cwd on that host rather than in the remote executor.
+        .build(&server)
         .await?;
     let thread_id = test.session_configured.thread_id;
     let queue = QueuedItemService::new(

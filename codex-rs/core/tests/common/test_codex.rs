@@ -998,7 +998,6 @@ impl TestCodexBuilder {
         // specific model can still override this with a config mutator.
         config.model = Some("gpt-5.5".to_string());
         config.cwd = cwd_override;
-        config.model_provider_id = "openai".to_string();
         config.model_provider = model_provider;
         if let Ok(path) = codex_utils_cargo_bin::cargo_bin("codex") {
             config.codex_self_exe = Some(path);

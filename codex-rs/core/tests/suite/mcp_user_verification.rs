@@ -91,6 +91,7 @@ async fn mcp_user_verification_rejects_configured_servers(source: CapabilitySour
     config.mcp_servers.set(serde_json::from_value(json!({
         "verification": {
             "command": if cfg!(windows) { "python" } else { "python3" },
+        "cwd": std::env::current_dir()?,
             "args": ["-u", "-c", SERVER], "default_tools_approval_mode": "approve"
         }
     }))?)?;

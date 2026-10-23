@@ -78,7 +78,7 @@ async fn worktree_start_and_fork_use_host_pool_and_preserve_legacy_resume() -> a
     fs::write(
         home.join("config.toml"),
         format!(
-            "sandbox_mode = \"workspace-write\"\nfeatures.worktrees = true\n[desktop]\ngit-worktree-root = {}\n[projects.{}]\ntrust_level = \"trusted\"\n",
+            "model_provider = \"openai\"\nsandbox_mode = \"workspace-write\"\nfeatures.worktrees = true\n[desktop]\ngit-worktree-root = {}\n[projects.{}]\ntrust_level = \"trusted\"\n",
             serde_json::to_string(&pool)?,
             serde_json::to_string(&source)?,
         ),

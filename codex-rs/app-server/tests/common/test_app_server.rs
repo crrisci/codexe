@@ -274,12 +274,14 @@ impl TestAppServer {
         cmd.env_remove(CODEX_INTERNAL_ORIGINATOR_OVERRIDE_ENV_VAR);
         // This harness exercises Responses RPCs. Preserve explicit mock/profile
         // providers; use OpenAI when the fixture would inherit the native default.
-        if let Ok(config) = codex_core::config::ConfigBuilder::default()
+        let fixture_config = codex_core::config::ConfigBuilder::default()
             .codex_home(codex_home.to_path_buf())
             .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
             .build()
-            .await
-            && config.model_provider_id == "xenolith"
+            .await;
+        if fixture_config
+            .as_ref()
+            .map_or(true, |config| config.model_provider_id == "xenolith")
         {
             cmd.args(["-c", "model_provider=\"openai\""]);
         }

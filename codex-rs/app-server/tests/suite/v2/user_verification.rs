@@ -184,6 +184,10 @@ async fn user_verification_stdio_requires_initialization_then_validates_challeng
 async fn user_verification_websocket_blocks_native_operations_before_validation() -> Result<()> {
     // TestAppServer speaks stdio; use the existing transport fixture for real WebSocket frames.
     let home = tempfile::tempdir()?;
+    std::fs::write(
+        home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )?;
     let (mut process, address) = spawn_websocket_server(home.path()).await?;
     let mut websocket = connect_websocket(address).await?;
     send_request(

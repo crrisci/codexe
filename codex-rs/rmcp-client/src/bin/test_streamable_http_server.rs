@@ -160,6 +160,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
     let actual_bind_addr = listener.local_addr()?;
+    let mut http_config = StreamableHttpServerConfig::default();
+    if let Ok(host) = std::env::var("MCP_TEST_ALLOWED_HOST") {
+        http_config.allowed_hosts.push(host);
+    }
     if let Ok(bound_addr_file) = std::env::var("MCP_STREAMABLE_HTTP_BOUND_ADDR_FILE") {
         fs::write(bound_addr_file, actual_bind_addr.to_string())?;
     }
@@ -220,7 +224,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             StreamableHttpService::new(
                 || Ok(TestToolServer::new()),
                 Arc::new(LocalSessionManager::default()),
-                StreamableHttpServerConfig::default(),
+                http_config,
             ),
         )
         .layer(middleware::from_fn_with_state(
