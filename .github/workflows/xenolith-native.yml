@@ -3,9 +3,9 @@
 name: Xenolith native
 on:
   push:
-    branches: [main, xenolith-native]
+    branches: [main]
   pull_request:
-    branches: [main, xenolith-native]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

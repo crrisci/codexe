@@ -58,7 +58,8 @@ Additional fork-specific files: README.md, README-UPSTREAM.md, .gitignore, XENOL
 XENOLITH-MODIFICATIONS.md, xenolith/tests/, and
 .github/workflows/xenolith-native.yml. Their additions are Apache-2.0.
 
-README-UPSTREAM.md is an unchanged copy of the baseline upstream README, retained for reference.
+README-UPSTREAM.md retains the baseline upstream README with a CodeXe historical-context banner.
+Contribution and license guides distinguish fork policies from historical upstream documents.
 
 CodeXe branding updates rename the fork and its documentation links to
 `crrisci/codexe`. The executable, configuration keys and upstream package names

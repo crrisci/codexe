@@ -19,7 +19,7 @@ Install Rust 1.95.0, a C/C++ compiler, OpenSSL development headers and a compati
 `bwrap` for Linux sandboxed tool execution. These commands do not install Xenolith.
 
 ```sh
-git clone --branch xenolith-native https://github.com/crrisci/codexe.git codexe
+git clone --branch main https://github.com/crrisci/codexe.git codexe
 cd codexe/codex-rs
 cargo build -p codex-cli --bin codex
 cargo build --manifest-path xenolith-wire/Cargo.toml --bin xenolith-session

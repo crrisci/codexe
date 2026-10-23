@@ -5,7 +5,7 @@ name: blocking-ci
 on:
   pull_request: {}
   push:
-    branches: [main, xenolith-native]
+    branches: [main]
 
 jobs:
   # Keep reusable workflow calls alphabetized. The `required` job below is the

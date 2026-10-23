@@ -5,7 +5,10 @@ The name combines Codex with a nod to Intel Xe processors.
 CodeXe preserves Codex's agent loop, tools, sandbox and approvals,
 while exposing the state of local inference and keeping durable KV sessions.
 
-[Setup guide](XENOLITH.md) | [Modification notices](XENOLITH-MODIFICATIONS.md)
+[Setup guide](XENOLITH.md) | [Contributing](CONTRIBUTING.md) | [License and attribution](docs/license.md)
+
+`main` is the development branch and includes the native and vision integration.
+Use it for builds and pull requests; the former `xenolith-native` branch has been consolidated here.
 
 ## Why native integration?
 
@@ -96,6 +99,13 @@ that need API translation. Its current frontend speaks Responses HTTP/SSE; CodeX
 require their own bridge frontends.
 
 CodeXe is maintained independently of OpenAI and is not affiliated with Intel.
-It retains the **Apache-2.0**
-[LICENSE](LICENSE), upstream [NOTICE](NOTICE) and [modification notices](XENOLITH-MODIFICATIONS.md).
-The [original upstream README](README-UPSTREAM.md) is retained for reference.
+## License and upstream attribution
+
+CodeXe is licensed under **[Apache-2.0](LICENSE)**. The [NOTICE](NOTICE) preserves
+OpenAI and third-party attributions; its MIT reference concerns Ratatui-derived
+code, not the license of CodeXe as a whole. See the
+[license overview](docs/license.md) and [modification notices](XENOLITH-MODIFICATIONS.md).
+
+The [upstream README](README-UPSTREAM.md) is historical reference documentation.
+Its installers and service links describe OpenAI Codex; use the CodeXe setup and
+contribution guides above for this fork.
