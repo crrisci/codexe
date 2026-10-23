@@ -3837,7 +3837,15 @@ impl Config {
         let model_provider_id = config_layer_stack.required_model_provider().map(str::to_string)
             .or(model_provider)
             .or(cfg.model_provider)
-            .unwrap_or_else(|| DEFAULT_MODEL_PROVIDER_ID.to_owned());
+            .unwrap_or_else(|| {
+                // The explicitly enabled Bedrock wizard starts from unauthenticated
+                // OpenAI onboarding before it configures the Bedrock provider.
+                if features.enabled(Feature::BedrockSetupWizard) {
+                    "openai".to_owned()
+                } else {
+                    DEFAULT_MODEL_PROVIDER_ID.to_owned()
+                }
+            });
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {

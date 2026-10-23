@@ -257,6 +257,30 @@ async fn native_xenolith_is_default_without_an_explicit_provider_or_model() -> s
 }
 
 #[tokio::test]
+async fn bedrock_wizard_uses_onboarding_default_but_preserves_explicit_providers()
+-> std::io::Result<()> {
+    let codex_home = tempdir()?;
+    for (provider, expected) in [
+        (None, "openai"),
+        (Some("xenolith"), "xenolith"),
+        (Some("openai"), "openai"),
+    ] {
+        let mut source = "[features]\nbedrock_setup_wizard = true\n".to_string();
+        if let Some(provider) = provider {
+            source = format!("model_provider = {provider:?}\n{source}");
+        }
+        let config = Config::load_from_base_config_with_overrides(
+            toml::from_str(&source).expect("wizard fixture"),
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await?;
+        assert_eq!(config.model_provider_id, expected);
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn load_config_applies_optional_mcp_startup_grace() -> std::io::Result<()> {
     let codex_home = tempdir()?;
     let config_toml: ConfigToml = toml::from_str("mcp_optional_startup_grace_ms = 2500")

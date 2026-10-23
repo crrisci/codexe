@@ -272,7 +272,7 @@ async fn worktree_start_and_fork_use_host_pool_and_preserve_legacy_resume() -> a
     fs::write(
         home.join("config.toml"),
         format!(
-            "features.worktrees=true\ncli_auth_credentials_store=\"file\"\nchatgpt_base_url=\"{}/backend-api\"\n",
+            "model_provider=\"openai\"\nfeatures.worktrees=true\ncli_auth_credentials_store=\"file\"\nchatgpt_base_url=\"{}/backend-api\"\n",
             server.uri(),
         ),
     )?;
@@ -309,7 +309,7 @@ async fn worktree_start_and_fork_use_host_pool_and_preserve_legacy_resume() -> a
             fs::write(
                 home.join("config.toml"),
                 format!(
-                    "features.worktrees=true\ncli_auth_credentials_store=\"ephemeral\"\nchatgpt_base_url=\"{}/backend-api\"\n[projects.{}]\ntrust_level=\"trusted\"\n",
+                    "model_provider=\"openai\"\nfeatures.worktrees=true\ncli_auth_credentials_store=\"ephemeral\"\nchatgpt_base_url=\"{}/backend-api\"\n[projects.{}]\ntrust_level=\"trusted\"\n",
                     server.uri(),
                     serde_json::to_string(&source)?,
                 ),

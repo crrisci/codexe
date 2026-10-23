@@ -229,6 +229,7 @@ pub(super) fn remote_aware_environment_id() -> String {
 
 /// Bind fixture HTTP traffic to the Docker bridge when the client runs remotely.
 /// Loopback would address the container itself instead of this test process.
+#[cfg(unix)]
 pub(super) async fn remote_accessible_mock_server() -> anyhow::Result<wiremock::MockServer> {
     let Some(container_name) = test_docker_container_name() else {
         return Ok(wiremock::MockServer::start().await);

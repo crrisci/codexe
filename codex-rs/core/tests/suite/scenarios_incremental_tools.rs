@@ -232,10 +232,16 @@ async fn tool_removal_appends_a_standalone_notice_without_rewriting_history() ->
     let server = responses::start_mock_server().await;
     let command = remote_aware_stdio_server_bin()?;
     let environment_id = remote_aware_environment_id();
+    let server_cwd = if environment_id == "remote" {
+        std::path::PathBuf::from("/tmp")
+    } else {
+        std::env::current_dir()?
+    };
     let server_config = |enabled_tools: &[&str]| {
         serde_json::from_value(json!({
             "command": command,
             "environment_id": environment_id,
+            "cwd": server_cwd,
             "env": {"MCP_TEST_SERVER_INSTRUCTIONS": "Echo service instructions."},
             "enabled_tools": enabled_tools,
             "default_tools_approval_mode": "approve",

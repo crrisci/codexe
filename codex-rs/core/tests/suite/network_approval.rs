@@ -222,7 +222,7 @@ async fn guardian_network_approval_preserves_action_and_outcome_routing() -> Res
         submit_managed_network_turn(
             &test,
             prompt,
-            vec![local(test.config.cwd.clone())],
+            vec![local(test.cwd_path().abs())],
             ApprovalsReviewer::AutoReview,
             AskForApproval::OnRequest,
         )
@@ -250,7 +250,7 @@ async fn guardian_network_approval_preserves_action_and_outcome_routing() -> Res
             "trigger": {
                 "callId": first_call_id,
                 "command": expected_command,
-                "cwd": test.config.cwd,
+                "cwd": test.cwd_path(),
                 "sandboxPermissions": "use_default",
                 "toolName": "exec_command",
                 "tty": false,
@@ -380,7 +380,7 @@ async fn strict_auto_review_routes_network_approval_to_guardian_when_user_review
     submit_managed_network_turn(
         &test,
         "grant turn permissions, then automatically review network access",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::User,
         AskForApproval::OnRequest,
     )
@@ -480,7 +480,7 @@ async fn cancelled_guardian_network_review_fails_closed_without_rewriting_turn_s
     submit_managed_network_turn(
         &test,
         marker,
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::AutoReview,
         AskForApproval::OnRequest,
     )
@@ -518,7 +518,7 @@ async fn cancelled_guardian_network_review_fails_closed_without_rewriting_turn_s
     submit_managed_network_turn(
         &test,
         "verify preserved state",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::User,
         AskForApproval::OnRequest,
     )
@@ -615,14 +615,14 @@ PY"#
     submit_managed_network_turn(
         &test,
         "explain why the network request fails",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::AutoReview,
         AskForApproval::OnRequest,
     )
     .await?;
     wait_for_guardian_request(&pending_guardian).await;
     wait_for_response_request(&parent_poll).await;
-    fs::write(test.config.cwd.join("disconnect-now"), "close")?;
+    fs::write(test.cwd_path().join("disconnect-now"), "close")?;
     wait_for_completion_without_network_prompt(&test).await;
 
     let output = parent_final
@@ -725,7 +725,7 @@ async fn timed_out_guardian_network_review_uses_timeout_outcome_without_user_fal
     submit_managed_network_turn(
         &test,
         "time out the Guardian network review",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::AutoReview,
         AskForApproval::OnRequest,
     )
@@ -881,7 +881,7 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
     submit_managed_network_turn(
         &test,
         "start a background terminal that waits before requesting network access",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::User,
         AskForApproval::OnRequest,
     )
@@ -1001,7 +1001,7 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
             "callId": start_call_id,
             "toolName": "exec_command",
             "command": original_command,
-            "cwd": test.config.cwd,
+            "cwd": test.cwd_path(),
             "sandboxPermissions": "use_default",
             "tty": true,
         })
@@ -1078,7 +1078,7 @@ async fn user_network_approval_once_session_and_denial_semantics() -> Result<()>
 
     let server = start_mock_server().await;
     let test = managed_network_unified_exec_test(&server).await?;
-    let environments = vec![local(test.config.cwd.clone())];
+    let environments = vec![local(test.cwd_path().abs())];
 
     mount_exec_network_turn(
         &server,
@@ -1104,7 +1104,7 @@ async fn user_network_approval_once_session_and_denial_semantics() -> Result<()>
     assert_eq!(approval.approval_id.as_deref(), None);
     let first_approval_call_id = approval.call_id.clone();
     assert!(!approval.turn_id.is_empty());
-    assert_eq!(approval.cwd, test.config.cwd.clone().into());
+    assert_eq!(approval.cwd, test.cwd_path().abs().into());
     assert_eq!(
         approval.reason.as_deref(),
         Some("codex-network-test.invalid is not in the allowed_domains")
@@ -1224,7 +1224,7 @@ async fn user_network_approval_once_session_and_denial_semantics() -> Result<()>
     submit_managed_network_turn(
         &test,
         "a different protocol must prompt and the user abort must stay a user outcome",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::User,
         AskForApproval::OnRequest,
     )
@@ -1473,7 +1473,7 @@ async fn allowing_network_policy_amendment_persists_context_and_bypasses_prompt(
 
     let server = start_mock_server().await;
     let test = managed_network_unified_exec_test(&server).await?;
-    let environments = vec![local(test.config.cwd.clone())];
+    let environments = vec![local(test.cwd_path().abs())];
     let first_responses = mount_exec_network_turn(
         &server,
         "resp-network-amendment-1",
@@ -1570,7 +1570,7 @@ async fn denying_network_policy_amendment_persists_and_blocks_request() -> Resul
     submit_managed_network_turn(
         &test,
         "persist a deny rule for this host",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::User,
         AskForApproval::OnRequest,
     )
@@ -1616,7 +1616,7 @@ async fn failed_network_policy_amendment_denies_request_and_does_not_approve_hos
 
     let server = start_mock_server().await;
     let test = managed_network_unified_exec_test(&server).await?;
-    let environments = vec![local(test.config.cwd.clone())];
+    let environments = vec![local(test.cwd_path().abs())];
     let first_responses = mount_exec_network_turn(
         &server,
         "resp-network-failed-amendment-1",
@@ -1703,11 +1703,11 @@ async fn unattributed_network_request_uses_active_turn_environment_fallback(
         &[]
     };
     let test = managed_network_unified_exec_test_with_features(&server, features).await?;
-    let mut selection = local(test.config.cwd.clone());
+    let mut selection = local(test.cwd_path().abs());
     if approvals_reviewer == ApprovalsReviewer::User {
-        let cwd = test.config.cwd.join("late-environment");
+        let cwd = test.cwd_path().join("late-environment");
         fs::create_dir(&cwd)?;
-        selection = local(cwd);
+        selection = local(cwd.abs());
         selection.config = EnvironmentConfigState::Pending;
     }
     let pending_model = mount_response_once_match(
@@ -1909,7 +1909,7 @@ async fn ambiguous_unattributed_network_request_is_not_assigned_to_active_calls(
     submit_managed_network_turn(
         &test,
         "start two active commands",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::User,
         AskForApproval::OnRequest,
     )
@@ -2171,7 +2171,7 @@ async fn guardian_receives_exact_triggers_for_concurrent_network_requests() -> R
     submit_managed_network_turn(
         &test,
         "run both network requests",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::AutoReview,
         AskForApproval::OnRequest,
     )
@@ -2302,7 +2302,7 @@ async fn guardian_receives_exact_trigger_for_single_network_request() -> Result<
     submit_managed_network_turn(
         &test,
         "run one network request",
-        vec![local(test.config.cwd.clone())],
+        vec![local(test.cwd_path().abs())],
         ApprovalsReviewer::AutoReview,
         AskForApproval::OnRequest,
     )
@@ -3300,9 +3300,9 @@ async fn submit_managed_network_turn(
         /*exclude_slash_tmp*/ false,
     );
     let (sandbox_policy, permission_profile) =
-        turn_permission_fields(permission_profile, test.config.cwd.as_path());
+        turn_permission_fields(permission_profile, test.cwd_path());
     let turn_environment_selections =
-        TurnEnvironmentSelections::new(test.config.cwd.clone(), environments);
+        TurnEnvironmentSelections::new(test.cwd_path().abs(), environments);
 
     test.codex
         .start_or_steer_turn(

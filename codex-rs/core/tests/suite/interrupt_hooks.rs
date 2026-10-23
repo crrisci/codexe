@@ -86,6 +86,8 @@ fn read_interrupt_hook_inputs(home: &Path) -> Result<Vec<Value>> {
         .collect()
 }
 
+// These fixtures execute host Python hooks and inspect host transcript files.
+// Remote hook placement is covered by hooks_executor.
 async fn build_test(server: &MockServer, system_message: Option<&str>) -> Result<TestCodex> {
     let system_message = system_message.map(str::to_string);
     test_codex()
@@ -98,7 +100,7 @@ async fn build_test(server: &MockServer, system_message: Option<&str>) -> Result
             trust_discovered_hooks(config);
             config.agent_interrupt_message_enabled = false;
         })
-        .build_with_auto_env(server)
+        .build(server)
         .await
 }
 
@@ -312,7 +314,7 @@ async fn async_interrupt_hook_runs_without_delaying_turn_aborted() -> Result<()>
             fs::write(script_path, gated_script).expect("write gated async interrupt script");
         })
         .with_config(trust_discovered_hooks)
-        .build_with_auto_env(&server)
+        .build(&server)
         .await?;
     start_interruptible_turn(&test, &server).await?;
 
@@ -381,7 +383,7 @@ async fn self_aborted_turn_runs_interrupt_hook_before_turn_aborted() -> Result<(
             fs::write(hooks_path, hooks.to_string()).expect("write pre-compact hook configuration");
         })
         .with_config(trust_discovered_hooks)
-        .build_with_auto_env(&server)
+        .build(&server)
         .await?;
 
     test.codex.submit(Op::Compact).await?;

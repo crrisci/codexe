@@ -255,7 +255,9 @@ pub(crate) struct AsyncSocket {
 impl AsyncSocket {
     fn new(socket: Socket) -> std::io::Result<AsyncSocket> {
         socket.set_nonblocking(true)?;
-        let async_socket = AsyncFd::new(socket)?;
+        // SAFETY: AsyncFd owns the socket; its descriptor stays open and unchanged
+        // until deregistration or extraction through AsyncFd::into_inner.
+        let async_socket = unsafe { AsyncFd::register(socket) }?;
         Ok(AsyncSocket {
             inner: async_socket,
         })
@@ -371,7 +373,8 @@ impl AsyncDatagramSocket {
     fn new(socket: Socket) -> std::io::Result<Self> {
         socket.set_nonblocking(true)?;
         Ok(Self {
-            inner: AsyncFd::new(socket)?,
+            // SAFETY: the owned socket is not closed or replaced while registered.
+            inner: unsafe { AsyncFd::register(socket) }?,
         })
     }
 
