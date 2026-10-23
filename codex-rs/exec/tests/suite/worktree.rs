@@ -244,7 +244,7 @@ async fn worktree_start_and_fork_use_host_pool_and_preserve_legacy_resume() -> a
     fs::write(
         home.join("config.toml"),
         format!(
-            "features.worktrees=true\n[projects.{}]\ntrust_level=\"untrusted\"\n",
+            "model_provider=\"openai\"\nfeatures.worktrees=true\n[projects.{}]\ntrust_level=\"untrusted\"\n",
             serde_json::to_string(&source)?,
         ),
     )?;

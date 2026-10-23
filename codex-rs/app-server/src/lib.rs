@@ -582,7 +582,13 @@ pub async fn run_main_with_transport_options(
         }
     };
     #[cfg(unix)]
-    let config = codex_core::xenolith::configure(config).await?;
+    let config = if matches!(&plugin_startup_config, PluginStartupConfig::Defaults) {
+        // Keep configuration diagnostics available when loading settings failed.
+        // Starting a model service here would hide the original config error.
+        config
+    } else {
+        codex_core::xenolith::configure(config).await?
+    };
     config.auth_config().validate()?;
     let auth_manager =
         AuthManager::shared_from_config(&config, /*enable_codex_api_key_env*/ false)

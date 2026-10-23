@@ -521,6 +521,10 @@ async fn queue_rejects_local_daemon_that_does_not_support_queueing() -> Result<(
 #[tokio::test]
 async fn queue_rejects_overrides_that_bypass_local_daemon() -> Result<()> {
     let codex_home = socket_test_home()?;
+    std::fs::write(
+        codex_home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )?;
     let socket_path = codex_app_server::app_server_control_socket_path(codex_home.path())?;
     std::fs::create_dir_all(
         socket_path

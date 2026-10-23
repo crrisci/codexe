@@ -227,6 +227,40 @@ pub(super) fn remote_aware_environment_id() -> String {
     }
 }
 
+/// Bind fixture HTTP traffic to the Docker bridge when the client runs remotely.
+/// Loopback would address the container itself instead of this test process.
+pub(super) async fn remote_accessible_mock_server() -> anyhow::Result<wiremock::MockServer> {
+    let Some(container_name) = test_docker_container_name() else {
+        return Ok(wiremock::MockServer::start().await);
+    };
+    let output = StdCommand::new("docker")
+        .args([
+            "inspect",
+            "-f",
+            "{{range .NetworkSettings.Networks}}{{println .Gateway}}{{end}}",
+            &container_name,
+        ])
+        .output()
+        .context("inspect remote test container gateway")?;
+    ensure!(
+        output.status.success(),
+        "docker inspect failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let gateways = String::from_utf8(output.stdout)?;
+    let gateway = gateways
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .context("remote test container has no host gateway")?;
+    let listener = std::net::TcpListener::bind((gateway, 0))
+        .context("bind fixture server to the Docker host gateway")?;
+    Ok(wiremock::MockServer::builder()
+        .listener(listener)
+        .start()
+        .await)
+}
+
 /// Returns the stdio MCP test server command path for the active test placement.
 ///
 /// Local test runs can execute the host-built test binary directly. Remote-aware

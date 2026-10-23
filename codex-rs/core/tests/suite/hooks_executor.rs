@@ -734,7 +734,7 @@ async fn executor_plugin_hook_fixture(
     plugins: &[(&'static str, Value)],
     responses: Vec<ResponseTemplate>,
 ) -> Result<ExecutorHookFixture> {
-    let server = start_mock_server().await;
+    let server = super::rmcp_client::remote_accessible_mock_server().await?;
     let hook_called = Arc::new(Notify::new());
     let hook_called_for_server = Arc::clone(&hook_called);
     Mock::given(method("POST"))

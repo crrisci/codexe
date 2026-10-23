@@ -13,6 +13,8 @@ common --experimental_platform_in_output_dir
 
 build --workspace_status_command=./scripts/workspace-status.sh
 build:windows --workspace_status_command=./scripts/workspace-status.cmd
+# Match Rust crt-static when compiling native MSVC dependencies (zstd/OpenSSL).
+build:windows --features=static_link_msvcrt
 
 # Runfiles strategy rationale: codex-rs/utils/cargo-bin/README.md
 common --noenable_runfiles

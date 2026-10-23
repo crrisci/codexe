@@ -218,6 +218,10 @@ async fn explicit_remote_control_startup_fails_when_disabled_by_requirements() -
         codex_home.path().join("requirements.toml"),
         "allow_remote_control = false\n",
     )?;
+    std::fs::write(
+        codex_home.path().join("config.toml"),
+        "model_provider = \"openai\"\n",
+    )?;
     let managed_config_path = codex_home.path().join("managed_config.toml");
     let socket_path = codex_home
         .path()

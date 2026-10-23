@@ -151,10 +151,15 @@ async fn daemon_startup(command: &str) -> Result<()> {
             .success(),
         "failed to prepare CLI test executable"
     );
+    let fixture_provider = if matches!(command, "bedrock" | "bedrock-running") {
+        "amazon-bedrock"
+    } else {
+        "openai"
+    };
     fs::write(
         home.path().join("config.toml"),
         format!(
-            "model_provider = \"openai\"\nmodel = \"gpt-5.6-terra\"\n\
+            "model_provider = \"{fixture_provider}\"\nmodel = \"gpt-5.6-terra\"\n\
          features.bedrock_setup_wizard = true\ncli_auth_credentials_store = \"file\"\n\
          suppress_unstable_features_warning = true\nanalytics.enabled = false\n\
          windows.sandbox = \"unelevated\"\n\

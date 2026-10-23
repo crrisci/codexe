@@ -4436,7 +4436,7 @@ async fn local_bundled_cleanup_hook_runs_without_saved_trust(
             }],
         }),
     };
-    let server = start_mock_server().await;
+    let server = super::rmcp_client::remote_accessible_mock_server().await?;
     wiremock::Mock::given(wiremock::matchers::method("POST"))
         .and(wiremock::matchers::path("/repl"))
         .respond_with(move |request: &wiremock::Request| {

@@ -387,8 +387,15 @@ async fn deeply_nested_forced_rm_is_rejected_before_execution_when_approvals_are
     let server = start_mock_server().await;
     let mut builder = test_codex();
     let test = builder.build_with_auto_env(&server).await?;
-    let sentinel = test.config.cwd.join("forced-rm-sentinel");
-    fs::write(&sentinel, "must not be deleted")?;
+    let sentinel = test.workspace_path_uri("forced-rm-sentinel")?;
+    test.fs()
+        .write_file(
+            &sentinel,
+            b"must not be deleted".to_vec(),
+            Default::default(),
+            /*sandbox*/ None,
+        )
+        .await?;
     let call_id = "deeply-nested-forced-rm";
     let args = json!({
         "cmd": "env env env env env env env env env rm -rf forced-rm-sentinel",
@@ -436,7 +443,13 @@ async fn deeply_nested_forced_rm_is_rejected_before_execution_when_approvals_are
         output.contains("rejected: blocked by policy"),
         "unexpected output: {output}"
     );
-    assert!(sentinel.exists(), "the rejected command must not execute");
+    assert_eq!(
+        test.fs()
+            .read_file_text(&sentinel, Default::default(), /*sandbox*/ None)
+            .await?,
+        "must not be deleted",
+        "the rejected command must not execute"
+    );
 
     Ok(())
 }
