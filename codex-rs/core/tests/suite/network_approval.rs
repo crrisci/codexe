@@ -9,6 +9,7 @@ use codex_core::config::Constrained;
 use codex_core::config::NetworkProxySpec;
 use codex_core::shell::ShellType;
 use codex_core::shell::get_shell;
+use codex_core::shell::get_shell_by_model_provided_path;
 use codex_core::windows_sandbox::WindowsSandboxLevelExt;
 use codex_exec_server::CreateDirectoryOptions;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
@@ -100,6 +101,7 @@ use test_case::test_case;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 
+const NETWORK_TEST_SHELL: &str = "/bin/bash";
 const NETWORK_TEST_HOST: &str = "codex-network-test.invalid";
 const NETWORK_TEST_TARGET: &str = "http://codex-network-test.invalid:80";
 
@@ -123,8 +125,7 @@ async fn guardian_network_approval_preserves_action_and_outcome_routing() -> Res
         .context("expected network command")?
         .to_string();
     let second_command = first_command.clone();
-    let expected_command = get_shell(ShellType::Sh)
-        .context("expected local sh")?
+    let expected_command = get_shell_by_model_provided_path(&PathBuf::from(NETWORK_TEST_SHELL))
         .derive_exec_args(&first_command, /*use_login_shell*/ false);
     let denial = "The destination is outside the approved test boundary.";
     let mut actions = Vec::new();
@@ -639,9 +640,10 @@ PY"#
     assert!(elapsed.parse::<u128>()? > 0);
     let message = &output[output.find(prefix).context("missing disconnect prefix")?..];
     let message = &message[..prefix.len() + elapsed.len() + suffix.len()];
-    insta::assert_snapshot!(message.replacen(elapsed, "<elapsed>", 1), @r"
-    Network request disconnected after <elapsed> ms, before approval could complete
-    ");
+    assert_eq!(
+        message.replacen(elapsed, "<elapsed>", 1),
+        "Network request disconnected after <elapsed> ms, before approval could complete"
+    );
     Ok(())
 }
 
@@ -992,8 +994,7 @@ async fn background_network_approval_uses_current_review_settings_and_original_e
     let actions = guardian_network_actions(&responses)?;
     assert_eq!(actions.len(), 2);
     assert_eq!(actions[0], actions[1]);
-    let original_command = get_shell(ShellType::Sh)
-        .context("expected local sh")?
+    let original_command = get_shell_by_model_provided_path(&PathBuf::from(NETWORK_TEST_SHELL))
         .derive_exec_args(&command, /*use_login_shell*/ false);
     assert_eq!(
         actions[0]["trigger"],
@@ -3272,7 +3273,7 @@ fn network_fetch_args(environment_id: &str) -> Value {
 
 fn network_exec_args(command: &str) -> Value {
     json!({
-        "shell": "/bin/bash",
+        "shell": NETWORK_TEST_SHELL,
         "cmd": command,
         "login": false,
         "yield_time_ms": 1_000,

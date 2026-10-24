@@ -198,6 +198,14 @@ pub fn run_main() -> ! {
     // Inner stage: apply seccomp/no_new_privs after bubblewrap has already
     // established the filesystem view.
     if apply_seccomp_then_exec {
+        // Bubblewrap starts the payload in a separate session, outside the
+        // launcher's process group. Re-arm parent death after its credential
+        // transitions so killing the wrapper also kills the namespace init
+        // and all commands in that namespace, including their descendants.
+        kill_inner_stage_with_parent().unwrap_or_else(|err| {
+            panic!("failed to bind inner sandbox lifetime to bubblewrap: {err}")
+        });
+
         if let Err(err) = crate::fd_mount::verify_fd_mounts(&verify_fd_mounts) {
             panic!("failed to verify descriptor-backed bubblewrap mount: {err}");
         }
@@ -864,6 +872,18 @@ impl ForwardedSignalMask {
             }
         }
     }
+}
+
+fn kill_inner_stage_with_parent() -> std::io::Result<()> {
+    // The parent may live outside our PID namespace (getppid() == 0).
+    let parent_pid = unsafe { libc::getppid() };
+    if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) } < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    if unsafe { libc::getppid() } != parent_pid {
+        unsafe { libc::raise(libc::SIGKILL) };
+    }
+    Ok(())
 }
 
 fn terminate_with_parent(parent_pid: libc::pid_t) {

@@ -1,3 +1,50 @@
+# Linux test setup
+
+For repeatable Linux/WSL checks, install the Rust toolchain pinned in
+`codex-rs/rust-toolchain.toml`, Node >=22, Python 3, curl, a C/C++ compiler,
+pkg-config, bubblewrap, and the OpenSSL, libcap and ALSA development packages.
+On Ubuntu these development packages are `libssl-dev`, `libcap-dev` and
+`libasound2-dev`. Existing private toolchains or a pkg-config sysroot can be
+used; the script does not install system packages or change shell profiles.
+
+From the fork root:
+
+```sh
+bash xenolith/scripts/test-linux.sh setup
+bash xenolith/scripts/test-linux.sh native
+bash xenolith/scripts/test-linux.sh network
+```
+
+`setup` prepares the test environment and builds the actual CLI,
+`codex-linux-sandbox` and `codex-code-mode-host`. `native` additionally runs
+wire, provider/config, native TUI, plugin startup and CLI simulator checks.
+`network` runs Linux sandbox unit tests and the core network-approval tests.
+These modes do not load a real model or run the entire upstream suite.
+
+The script sets at least 16 MiB of Rust test-thread stack, as in CI, and
+downloads the Codex-built V8 archive and bindings. It first checks the release
+manifest against the repository's pinned manifest hash, then verifies both
+artifact hashes. The default Deno V8 URL may not publish the required variant.
+The verified cache is private and versioned under
+`.test-artifacts/linux-tests/v8/`; set `XENOLITH_TEST_CACHE_DIR` to use another
+cache. Completed downloads are reverified on every run.
+
+For additional Cargo tests, use the generated environment:
+
+```sh
+source .test-artifacts/linux-tests/env.sh
+cargo test --manifest-path codex-rs/Cargo.toml -p codex-core --lib
+```
+
+The private environment file retains the selected toolchain paths and any
+provided pkg-config/sysroot flags, so it can also be sourced in a fresh shell.
+
+Building `codex-code-mode-host` is required by hook fixtures that execute code
+mode. A missing helper can make those tests fail even when runtime unit tests
+pass. Network fixtures select their shell explicitly; their approval metadata
+must describe that same executable. A denial must release the process lock
+without waiting for test teardown.
+
 # Explicit real-model smoke
 
 The ordinary `test-*.mjs` acceptance suites use simulators. `model-smoke.mjs`

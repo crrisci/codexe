@@ -113,3 +113,10 @@ raw diagnostics remain in debug logs. Additional modified integration points:
 - `codex-rs/tui/src/startup_draft_tests.rs`
 - `codex-rs/tui/src/app/tests.rs`
 - `codex-rs/tui/src/app/tests/xenolith_streaming_tests.rs`
+
+The Linux process-lifecycle and test-setup follow-up modifies
+`codex-rs/linux-sandbox/src/linux_run_main.rs` and
+`codex-rs/core/tests/suite/network_approval.rs`, and adds
+`xenolith/scripts/test-linux.sh`. It ties the inner sandbox to its wrapper's
+lifetime, aligns test shell metadata and supplies a reproducible native test
+environment. These changes retain the Apache-2.0 license.
