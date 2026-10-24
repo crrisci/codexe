@@ -7,8 +7,6 @@ use codex_core::StartThreadOptions;
 use codex_core::TurnInputRequest;
 use codex_core::config::Constrained;
 use codex_core::config::NetworkProxySpec;
-use codex_core::shell::ShellType;
-use codex_core::shell::get_shell;
 use codex_core::shell::get_shell_by_model_provided_path;
 use codex_core::windows_sandbox::WindowsSandboxLevelExt;
 use codex_exec_server::CreateDirectoryOptions;
@@ -2483,7 +2481,7 @@ async fn remote_guardian_network_decisions_are_scoped_to_each_request_and_enviro
     .await
     .context("remote session approval should bypass another network prompt")?;
 
-    let local_shell = get_shell(ShellType::Sh).context("expected local sh")?;
+    let local_shell = get_shell_by_model_provided_path(&PathBuf::from(NETWORK_TEST_SHELL));
     let mut expected_actions = Vec::with_capacity(cases.len());
     for (call_id, command, environment, _, _) in &cases {
         let cwd = environment
