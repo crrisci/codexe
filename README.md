@@ -99,6 +99,7 @@ that need API translation. Its current frontend speaks Responses HTTP/SSE; CodeX
 require their own bridge frontends.
 
 CodeXe is maintained independently of OpenAI and is not affiliated with Intel.
+
 ## License and upstream attribution
 
 CodeXe is licensed under **[Apache-2.0](LICENSE)**. The [NOTICE](NOTICE) preserves

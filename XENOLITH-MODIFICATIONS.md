@@ -121,9 +121,14 @@ The Linux process-lifecycle and test-setup follow-up modifies
 lifetime, aligns test shell metadata and supplies a reproducible native test
 environment. These changes retain the Apache-2.0 license.
 
-
 The real-vision acceptance follow-up adds `xenolith/ROADMAP.md`,
 `xenolith/tests/vision-smoke.mjs`, `xenolith/tests/helpers/vision-smoke.mjs` and
 `xenolith/tests/test-vision-harness.mjs`, and updates the test guide. These
 Apache-2.0 additions preserve real-weight opt-in behavior; ordinary CI checks
 only the harness and existing native simulators.
+
+The CI follow-up updates the Fence action pin and root documentation formatting,
+and adds `patches/rules_rust_windows_wrapper_param_file.patch` with matching
+`MODULE.bazel` and Bazel workflow changes. The patch preserves wrapper/compiler
+argument separation while avoiding native Windows command-line limits. It
+includes parser regressions and keeps the existing product test targets enabled.

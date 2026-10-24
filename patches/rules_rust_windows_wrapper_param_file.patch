@@ -1,0 +1,110 @@
+diff --git a/rust/private/rustc.bzl b/rust/private/rustc.bzl
+--- a/rust/private/rustc.bzl
++++ b/rust/private/rustc.bzl
+@@ -1121,6 +1121,12 @@
+ 
+     # Wrapper args first
+     process_wrapper_flags = ctx.actions.args()
++    if not toolchain._bootstrapping and "windows" in toolchain.exec_triple.str:
++        # Build-script paths alone can exceed CreateProcessW's 32767 UTF-16
++        # limit, even when rustc's own flags already use a response file.
++        # Keep File-typed Args so Bazel still performs action path mapping.
++        process_wrapper_flags.set_param_file_format("multiline")
++        process_wrapper_flags.use_param_file("--wrapper-arg-file=%s", use_always = True)
+ 
+     for build_env_file in build_env_files:
+         process_wrapper_flags.add("--env-file", build_env_file)
+diff --git a/util/process_wrapper/options.rs b/util/process_wrapper/options.rs
+--- a/util/process_wrapper/options.rs
++++ b/util/process_wrapper/options.rs
+@@ -51,6 +51,33 @@
+     pub(crate) rustc_output_format: Option<rustc::ErrorFormat>,
+ }
+ 
++// This response file contains wrapper flags, not compiler flags. Expand only
++// before the separator: rustc response files keep their existing handling.
++fn expand_wrapper_args(
++    argv: Vec<String>,
++    mut read: impl FnMut(&str) -> io::Result<String>,
++) -> Result<Vec<String>, OptionError> {
++    let mut expanded = Vec::new();
++    let mut child = false;
++    for arg in argv {
++        if !child {
++            if arg == "--" {
++                child = true;
++            } else if let Some(path) = arg.strip_prefix("--wrapper-arg-file=") {
++                let text = read(path).map_err(|error| {
++                    OptionError::Generic(format!("cannot read wrapper argument file {path:?}: {error}"))
++                })?;
++                // Bazel's multiline format writes each argument verbatim.
++                // Do not shell-split spaces, unescape backslashes or recurse.
++                expanded.extend(text.lines().map(str::to_owned));
++                continue;
++            }
++        }
++        expanded.push(arg);
++    }
++    Ok(expanded)
++}
++
+ pub(crate) fn options() -> Result<Options, OptionError> {
+     // Process argument list until -- is encountered.
+     // Everything after is sent to the child process.
+@@ -137,7 +164,7 @@
+     );
+ 
+     let mut child_args = match flags
+-        .parse(env::args().collect())
++        .parse(expand_wrapper_args(env::args().collect(), |path| std::fs::read_to_string(path))?)
+         .map_err(OptionError::FlagError)?
+     {
+         ParseOutcome::Help(help) => {
+@@ -522,6 +549,47 @@
+     use super::*;
+ 
+     #[test]
++    fn wrapper_response_file_preserves_argument_boundaries() {
++        let argv = vec!["wrapper", "--wrapper-arg-file=flags", "--", "rustc", "@compiler.params"];
++        let result = expand_wrapper_args(argv.into_iter().map(str::to_owned).collect(), |path| {
++            assert_eq!(path, "flags");
++            Ok("--env-file\r\npath with spaces\r\n--subst\r\npwd=C:\\workspace\\\r\n".into())
++        }).unwrap();
++        assert_eq!(result, vec!["wrapper", "--env-file", "path with spaces", "--subst", "pwd=C:\\workspace\\", "--", "rustc", "@compiler.params"]);
++    }
++
++    #[test]
++    fn wrapper_response_file_keeps_large_build_script_lists_in_order() {
++        let paths: Vec<String> = (0..600).map(|i| format!("bazel-out/very-long-windows-execution-configuration/external/build-script-{i}/link-search-paths")).collect();
++        let text = format!("--arg-file\n{}\n", paths.join("\n"));
++        assert!(text.len() > 32767);
++        let expanded = expand_wrapper_args(vec!["wrapper".into(), "--wrapper-arg-file=flags".into(), "--".into(), "rustc".into()], |_| Ok(text.clone())).unwrap();
++        let mut actual = None;
++        let mut flags = Flags::new();
++        flags.define_repeated_flag("--arg-file", "", &mut actual);
++        match flags.parse(expanded).unwrap() {
++            ParseOutcome::Parsed(child) => assert_eq!(child, vec!["rustc"]),
++            ParseOutcome::Help(_) => panic!("unexpected help"),
++        }
++        assert_eq!(actual.unwrap(), paths);
++    }
++
++    #[test]
++    fn wrapper_response_file_does_not_expand_compiler_options_or_nested_values() {
++        let argv = vec!["wrapper", "--wrapper-arg-file=flags", "--", "rustc", "--wrapper-arg-file=compiler"];
++        let actual = expand_wrapper_args(argv.into_iter().map(str::to_owned).collect(), |path| {
++            assert_eq!(path, "flags");Ok("--env-file\n@literal-name\n".into())
++        }).unwrap();
++        assert_eq!(actual, vec!["wrapper", "--env-file", "@literal-name", "--", "rustc", "--wrapper-arg-file=compiler"]);
++    }
++
++    #[test]
++    fn wrapper_response_file_read_failure_is_an_error() {
++        let result = expand_wrapper_args(vec!["wrapper".into(), "--wrapper-arg-file=missing".into()], |_| Err(io::Error::new(io::ErrorKind::NotFound, "missing")));
++        assert!(result.unwrap_err().to_string().contains("cannot read wrapper argument file"));
++    }
++
++    #[test]
+     fn test_enforce_allow_features_flag_user_didnt_say() {
+         let args = vec!["rustc".to_string()];
+         let subst_mappings: Vec<(String, String)> = vec![];

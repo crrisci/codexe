@@ -78,6 +78,8 @@ jobs:
         shell: bash
         run: |
           bazel_targets=(
+            # Exercise the patched wrapper parser as well as product targets.
+            @rules_rust//util/process_wrapper:process_wrapper_test
             //...
             # Keep standalone V8 library targets out of the ordinary Bazel CI
             # path. V8 consumers under `//codex-rs/...` still participate

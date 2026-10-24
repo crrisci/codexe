@@ -213,6 +213,8 @@ rules_rust.patch(
         "//patches:rules_rust_group_build_script_arg_files.patch",
         "//patches:rules_rust_windows_execroot_separators.patch",
         "//patches:rules_rust_compiler_thp.patch",
+        # Move wrapper flags as well as rustc flags off the Windows command line.
+        "//patches:rules_rust_windows_wrapper_param_file.patch",
     ],
     strip = 1,
 )

@@ -6,15 +6,15 @@ the remaining work separate from those completed checks.
 
 | # | Work | Status | Completion criteria |
 |---|---|---|---|
-| 1 | Close CodeXe CI for the published changes | Pending | Review blocking, postmerge and Xenolith native jobs; resolve actual failures and distinguish Linux/PTL evidence from Windows/Bazel/container checks. |
+| 1 | Close CodeXe CI for the published changes | In progress | Review blocking, postmerge and Xenolith native jobs; resolve actual failures and distinguish Linux/PTL evidence from Windows/Bazel/container checks. |
 | 2 | Consolidate real text/vision acceptance | Completed (PTL, 2026-10-24) | Keep real-weight tests opt-in; verify actual image bytes, successful `view_image`, exact fixture answers, live/restarted conversation resume, owned-process cleanup and reports identifying source/binaries. |
 | 3 | Extend real recovery acceptance | Pending | Cancellation during image encoding, crash with a pending image tool, rewind/fork and image-budget changes recover explicitly without duplicate effects. Demonstrate native KV loads separately from conversation resume. |
 | 4 | Qualify Panther Lake in the engine | Pending | Record PCI/device, driver, engine/model and repeatable measurements; prepare minimal upstream evidence and evaluate XMX only in the engine project. Do not infer capabilities in clients or publish upstream reports automatically. |
 | 5 | Prepare bridge 0.4.0-rc.2 | Pending | Package the published bridge fixes, verify archive/checksum and clean installation/API acceptance, review CI and release notes; keep persistent bindings experimental. |
 
-Item **2 is complete**. Items 1, 3, 4 and 5 remain saved for subsequent work;
-completion of this item does not close platform CI, failure recovery or hardware
-qualification. CI review (1) can proceed independently. Bridge release work belongs to
+Item **2 is complete**. Current focus: **1**; items 3, 4 and 5 remain saved
+for subsequent work. Completion of item 2 does not close platform CI, failure
+recovery or hardware qualification. Bridge release work belongs to
 [crrisci/xenolith-bridge](https://github.com/crrisci/xenolith-bridge); hardware
 qualification belongs to the engine rather than CodeXe or the bridge.
 
@@ -56,3 +56,20 @@ guarantee inferred from conversation resume. The initial configuration error
 (disabled reasoning plus an explicit reasoning budget) is retained in private
 failure evidence; the harness now removes inherited reasoning knobs for its
 explicit no-reasoning vision calls. No production Rust changes were needed.
+
+
+## Item 1 progress
+
+CI logs identify separate formatting, runner/Fence, Windows compiler-wrapper,
+resource/runfiles and remote-test failures. The formatting corrections use the
+locked Prettier version. Fence stays in audit mode with a verified complete
+Action pin including upstream resolver-layout fixes. Windows wrapper flags use
+response files independently of compiler flags; upstream wrapper tests remain
+in the Bazel matrix alongside the unchanged product target set.
+
+The dependency gate additionally reports RUSTSEC-2026-0387 in crypto-bigint
+0.5.5. The patched 0.7.6 line is not semver-compatible with the current
+elliptic-curve/p256 dependencies reached through secrets, AWS credentials,
+user verification and RTC. Item 1 remains open until compatible coordinated
+upstream updates and the platform/test failures are resolved. No vulnerability
+ignore, product-feature removal or failed-test suppression is used to close it.
