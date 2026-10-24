@@ -120,3 +120,10 @@ The Linux process-lifecycle and test-setup follow-up modifies
 `xenolith/scripts/test-linux.sh`. It ties the inner sandbox to its wrapper's
 lifetime, aligns test shell metadata and supplies a reproducible native test
 environment. These changes retain the Apache-2.0 license.
+
+
+The real-vision acceptance follow-up adds `xenolith/ROADMAP.md`,
+`xenolith/tests/vision-smoke.mjs`, `xenolith/tests/helpers/vision-smoke.mjs` and
+`xenolith/tests/test-vision-harness.mjs`, and updates the test guide. These
+Apache-2.0 additions preserve real-weight opt-in behavior; ordinary CI checks
+only the harness and existing native simulators.

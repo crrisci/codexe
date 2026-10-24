@@ -107,3 +107,74 @@ promptly during that wait. Focused Rust TUI tests (`cargo test -p codex-tui
 --lib xenolith`, from `codex-rs`) exercise the dedicated progress row, stale
 event filtering and lifecycle cleanup, plus actual transcript consolidation
 across native telemetry and terminal resize without duplicating the answer.
+
+
+# Explicit real-vision smoke
+
+`vision-smoke.mjs` promotes the private Panther Lake experiment into an opt-in,
+portable Linux/WSL driver. Like `model-smoke.mjs`, it is excluded from
+`test-*.mjs` and ordinary CI; it never downloads weights. See
+[the remaining roadmap](../ROADMAP.md) for subsequent recovery and hardware work.
+
+From the fork root, with no Xenolith weight owner:
+
+```sh
+XENOLITH_BIN=/absolute/path/to/xenolith \
+XENOLITH_MODEL=/absolute/path/to/model.gguf \
+XENOLITH_MMPROJ=/absolute/path/to/matching-projector.gguf \
+XENOCODEX_NATIVE_CODEX_BIN="$PWD/codex-rs/target/debug/codex" \
+  node xenolith/tests/vision-smoke.mjs
+```
+
+Build the native binaries first with `bash xenolith/scripts/test-linux.sh setup`.
+Node >=22, Python 3, `pgrep`, Linux/WSL and matching engine/model/projector files
+are required. The driver requires 21 GiB available RAM and 5 GiB free artifact
+disk, refuses an existing engine/held shared weight lock, and launches one owned
+engine with a 65536-token context and a 4 GiB cache budget. All four paths must
+be explicit absolute paths; no private machine paths are embedded in the script.
+
+The four required cases are:
+
+1. Attach a generated PNG, require its exact color answer and observe the actual
+   PNG bytes and advertised image budget in native `append`/`rebuild` requests.
+2. Resume the same conversation from another CLI process, with unchanged native
+   binding and a newer committed epoch.
+3. Stop the owned engine, start a different process with the same private state,
+   then resume that same conversation and observe the native session reopen.
+4. Start a fresh conversation in a separate Codex home/binding directory, ask
+   `view_image` to inspect a different-colored PNG, and require exactly one
+   actual tool call plus image bytes returned under its matching native call ID.
+   No attachment seeds this conversation and no other tools may execute.
+
+A transparent Unix-socket observer forwards bytes unchanged and retains actual
+requests/responses in private `wire.jsonl`. It verifies payload hashes, not just
+a correct answer or a `view_image` name found in older conversation history.
+Stdin is closed; the `--` separator prevents variadic `--image` parsing from
+swallowing the prompt. Image filenames/prompts do not disclose the chosen color.
+These small color fixtures establish integration, not general visual quality.
+
+A separate native session is checkpointed before the restart. Its generation
+after restart must report `resume.loaded:true` and positive native cached-token
+accounting. The report distinguishes this independent probe from the CLI image
+conversation: conversation resume alone is not evidence of a specific KV load.
+CLI terminal usage/resume fields are retained without converting a valid
+history rebuild into a cache-restoration claim.
+
+Expect four `VISION_PASS` lines and `VISION_SMOKE_PASSED 4/4`. Missing vision
+capabilities, wrong answers, missing actual media/tool output, failed snapshots,
+nonzero CLI exits, timeouts or interruptions fail the run. Each CLI invocation
+keeps the existing ten-minute budget. Interruptions terminate its owned process
+group and clean up the exact spawned engine, never another user's engine.
+
+Private `.test-artifacts/vision-smoke-*` reports include source revisions/dirty
+state, runner/helper/model/projector/CLI/engine SHA256 hashes, fixture hashes,
+capabilities, resource checks, native frames, CLI logs and cleanup outcomes.
+Supplied binary hashes identify what ran; a repository revision by itself does
+not certify how an externally supplied executable was built. Engine logs and
+reports persist on failure. Private temporary socket directories are retained
+for ownership diagnosis; no model or session state is committed.
+
+The default CI wildcard runs `test-vision-harness.mjs` without weights to check
+fixture pixels, closed stdin and image argument boundaries, UTF-8 framing,
+byte-preserving observation, and rejection of missing/wrong media, unrelated
+sessions/call IDs or extra tools. It is harness coverage, not real inference.
