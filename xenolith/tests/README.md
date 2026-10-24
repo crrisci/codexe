@@ -187,3 +187,41 @@ and Gemma-4-26B-A4B-it-qat UD-Q4_K_XL with its F16 projector. The native
 simulator/harness suite passed 48/48 on Linux/Node 22.23.4. See the roadmap for
 remaining platform, recovery and engine qualification work. Real-weight tests
 remain opt-in and these results cover only that configuration.
+
+
+# Explicit real-vision recovery
+
+Run `vision-smoke.mjs --recovery` with the same explicit inputs as the vision
+smoke, plus `XENOCODEX_NATIVE_SESSION_BIN` pointing to the offline session tool:
+
+```sh
+cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-xenolith-wire --bin xenolith-session
+XENOLITH_BIN=/absolute/path/to/xenolith \
+XENOLITH_MODEL=/absolute/path/to/model.gguf \
+XENOLITH_MMPROJ=/absolute/path/to/mmproj.gguf \
+XENOCODEX_NATIVE_CODEX_BIN="$PWD/codex-rs/target/debug/codex" \
+XENOCODEX_NATIVE_SESSION_BIN="$PWD/codex-rs/target/debug/xenolith-session" \
+  node xenolith/tests/vision-smoke.mjs --recovery
+```
+
+After the four ordinary vision cases and independent KV probe, recovery checks
+rewind through the offline tool with a retained image, an image-budget change
+and restoration in the same native session, a client crash after the engine
+accepts a tool image but before its ACK reaches the client, interruption before
+an image reply, and a fork with a different image while preserving its parent.
+Fork coverage uses the actual stdio app-server API; it never edits bindings or
+copies them to fabricate a branch. Fault injection has separate private wire
+logs and is explicitly distinct from the transparent observation proxy.
+
+The runner preserves reports and fault boundaries even on failure. Synthetic
+fault-proxy checks are `test-vision-recovery-harness.mjs`; ordinary CI still
+loads no weights. The test deliberately kills only its own CLI children, uses
+private homes/bindings/sockets and closes its app-server before resuming the
+parent. The engine remains owned and cleaned up by the vision runner.
+
+Protocol v2 image preparation is synchronous, before the image reply and before
+the generation stream. It does not expose an encoder progress/cancellation
+boundary. Interruption before an image ACK therefore demonstrates client
+reconciliation only, **not cancellation of image encoding**. The report keeps
+this engine limitation explicit. Conversation recovery, rewind and fork also
+do not imply a KV load; only the independent snapshot probe asserts one.

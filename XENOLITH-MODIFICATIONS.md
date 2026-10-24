@@ -146,3 +146,9 @@ The Windows manifest test follow-up uses the existing runfiles-aware
 `codex-rs/windows-sandbox-rs/tests/helper_manifest.rs`. Cargo and Bazel locate
 the same setup executable before inspecting its manifest; the resource checks
 remain unchanged. This change retains the Apache-2.0 license.
+
+The opt-in recovery acceptance follow-up extends `xenolith/tests/vision-smoke.mjs`
+and its shared helper, adds `xenolith/tests/helpers/vision-recovery.mjs` and
+`xenolith/tests/test-vision-recovery-harness.mjs`, and updates the test guide
+and roadmap. These Apache-2.0 additions keep real weights outside ordinary CI
+and distinguish client interruption from the engine's synchronous encoder.

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 export const colors = [['RED', [230, 15, 15]], ['GREEN', [15, 190, 15]], ['BLUE', [15, 15, 230]]];
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function squarePng(rgb) {
+export function squarePng(rgb, tag) {
   const crc32 = bytes => {
     let crc = 0xffffffff;
     for (const byte of bytes) {
@@ -33,11 +33,11 @@ export function squarePng(rgb) {
       for (let c = 0; c < 3; c++) pixels[y * 769 + 1 + x * 3 + c] = rgb[c];
   }
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header),
-    chunk('IDAT', deflateSync(pixels)), chunk('IEND', Buffer.alloc(0))]);
+    chunk('IDAT', deflateSync(pixels)), ...(tag ? [chunk('tEXt', Buffer.from(`fixture\0${tag}`))] : []), chunk('IEND', Buffer.alloc(0))]);
 }
-export async function imageFixture(workspace, name, exclude) {
+export async function imageFixture(workspace, name, exclude, tag) {
   const choices = colors.filter(([color]) => color !== exclude), [expected, rgb] = choices[randomInt(choices.length)];
-  const bytes = squarePng(rgb), path = join(workspace, name);
+  const bytes = squarePng(rgb, tag), path = join(workspace, name);
   await writeFile(path, bytes, { mode: 0o600 });
   return { path, expected, rgb, sha256: sha256(bytes), bytes: bytes.length };
 }
@@ -48,7 +48,7 @@ export function visionEnv(base, overrides) {
 }
 export function cliArgs({ workspace, prompt, resume = false, image }) {
   return ['exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--sandbox', 'read-only',
-    '--json', '-C', workspace, '-c', 'model_reasoning_effort="none"', ...(resume ? ['resume', '--last'] : []),
+    '--json', '-C', workspace, '-c', 'model_reasoning_effort="none"', ...(resume ? ['resume', ...(typeof resume === 'string' ? [resume] : ['--last'])] : []),
     ...(image ? ['--image', image] : []), '--', prompt];
 }
 
@@ -124,9 +124,10 @@ export function phaseEvidence(records, phase, fixture, { tool = false, attachmen
 }
 
 // Each child owns its Unix process group; stdin is closed even for --image.
-export async function runClient(binary, args, { cwd, env, signal, timeoutMs = 600000 } = {}) {
+export async function runClient(binary, args, { cwd, env, signal, timeoutMs = 600000, onSpawn } = {}) {
   signal?.throwIfAborted();
   const child = spawn(binary, args, { cwd, env, detached: process.platform !== 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+  onSpawn?.(child);
   let stdout = '', stderr = '', timed_out = false, killTimer;
   const started = performance.now();
   child.stdout.on('data', b => { stdout += b; });child.stderr.on('data', b => { stderr += b; });

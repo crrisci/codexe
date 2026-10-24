@@ -13,11 +13,13 @@ import { cliArgs, connectWire, imageFixture, phaseEvidence, runClient, sleep, vi
 
 const execute = promisify(execFile), GiB = 1024 ** 3;
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const recoveryMode = process.argv.includes('--recovery');
+assert.ok(process.argv.slice(2).every(arg => arg === '--recovery'), 'Only --recovery is supported');
 const control = new AbortController();
 for (const name of ['SIGINT', 'SIGTERM']) process.once(name, () => {
   process.exitCode = name === 'SIGINT' ? 130 : 143;control.abort(new Error(`Vision smoke interrupted by ${name}`));
 });
-const report = { mode: 'real_vision_smoke', status: 'running', started: new Date().toISOString(), cases: [],
+const report = { mode: recoveryMode ? 'real_vision_recovery' : 'real_vision_smoke', status: 'running', started: new Date().toISOString(), cases: [],
   engine_pids: [], snapshot_probe: { verified: false }, scope: 'Synthetic square colors; not general visual quality or CLI KV certification.' };
 let root, socketDir, engine, engineLog, observer, wire, trace, enginePath, engineSocket;
 const frames = [];
@@ -85,10 +87,11 @@ async function startEngine(label, config) {
   }
   throw new Error('Vision engine readiness timeout');
 }
-async function binding(directory) {
+async function binding(directory, thread) {
   const files = (await readdir(directory)).filter(name => name.endsWith('.json'));
-  assert.equal(files.length, 1, 'Each private conversation must have exactly one native binding');
-  const value = JSON.parse(await readFile(join(directory, files[0]), 'utf8'));
+  if (!thread) assert.equal(files.length, 1, 'Each private conversation must have exactly one native binding');
+  else assert.ok(files.includes(`${thread}.json`), 'Expected thread binding must exist');
+  const value = JSON.parse(await readFile(join(directory, thread ? `${thread}.json` : files[0]), 'utf8'));
   assert.equal(value.in_flight, false, 'Conversation must be durably committed');return value;
 }
 async function invoke(label, config, fixture, { resume = false, attachment = false, tool = false, prompt } = {}) {
@@ -107,7 +110,9 @@ async function invoke(label, config, fixture, { resume = false, attachment = fal
   item.answer = events.findLast(e => e.type === 'item.completed' && e.item?.type === 'agent_message')?.item.text;
   assert.equal(item.answer, fixture.expected, `${label}: expected exact uppercase fixture color`);
   item.wire = phaseEvidence(frames, label, fixture, { attachment, tool, budgets: report.describe.vision.budgets });
-  item.binding = await binding(config.env.XENOLITH_STATE_DIR);
+  item.thread = events.find(e => e.type === 'thread.started')?.thread_id;
+  assert.ok(item.thread, 'CLI must report its thread identity');
+  item.binding = await binding(config.env.XENOLITH_STATE_DIR, item.thread);
   item.status = 'passed';console.log(`VISION_PASS ${label}`);await flush();return item;
 }
 try {
@@ -118,6 +123,7 @@ try {
   const [engineBin, model, projector, codex] = await Promise.all([
     required('XENOLITH_BIN', true), required('XENOLITH_MODEL'), required('XENOLITH_MMPROJ'), required('XENOCODEX_NATIVE_CODEX_BIN', true),
   ]);enginePath = engineBin;
+  const sessionControl = recoveryMode ? await required('XENOCODEX_NATIVE_SESSION_BIN', true) : undefined;
   const available = Number(/^MemAvailable:\s+(\d+)/m.exec(await readFile('/proc/meminfo', 'utf8'))?.[1]) * 1024;
   assert.ok(available >= 21 * GiB, 'Refusing model allocation: need 21 GiB MemAvailable');
   const disk = await statfs(root);assert.ok(disk.bavail * disk.bsize >= 5 * GiB, 'Require 4 GiB cache budget plus 1 GiB free');
@@ -148,7 +154,8 @@ try {
   observer = await wireObserver(clientSocket, engineSocket, record => { frames.push(record);trace.write(JSON.stringify(record) + '\n'); });
   const env = visionEnv(process.env, { CODEX_HOME: join(root, 'home'), XENOLITH_STATE_DIR: join(root, 'bindings'),
     XENOLITH_SOCKET: clientSocket, XENOLITH_NO_SPAWN: '1', XENOLITH_MAX_OUTPUT_TOKENS: '1024' });
-  const config = { engine: engineBin, model, projector, codex, workspace, env };
+  const config = { engine: engineBin, model, projector, codex, workspace, env, sessionControl };
+  if (sessionControl) report.sha256.session_control = await hashFile(sessionControl);
   await startEngine('initial', config);
   const original = await invoke('attachment', config, first, { attachment: true,
     prompt: 'Look at the attached image. What color is the large square inside the white border? Do not use tools. Answer with exactly one uppercase English color word and nothing else.' });
@@ -180,8 +187,14 @@ try {
   const tool = await invoke('view-image-tool', toolConfig, second, { tool: true,
     prompt: `Use view_image to open ${second.path}. Do not use shell, code, or any other tool. What color is the large square inside the white border? Answer with exactly one uppercase English color word and nothing else.` });
   assert.notEqual(tool.binding.session, original.binding.session, 'Tool case must use a fresh native conversation');
+  if (recoveryMode) {
+    report.sha256.recovery_helper = await hashFile(fileURLToPath(new URL('./helpers/vision-recovery.mjs', import.meta.url)));
+    report.config.session_control = sessionControl;
+    const { runRecovery } = await import('./helpers/vision-recovery.mjs');
+    await runRecovery({ root, socketDir, engineSocket, config, report, frames, observer, invoke, original, first, second, signal: control.signal, flush });
+  }
   assert.deepEqual(observer.errors, [], 'Wire observer must not hide protocol or connection errors');
-  check();report.status = 'passed';console.log('VISION_SMOKE_PASSED 4/4; independent native snapshot probe verified');
+  check();report.status = 'passed';console.log(`VISION_SMOKE_PASSED ${report.cases.length}/${report.cases.length}; independent native snapshot probe verified${recoveryMode ? '; recovery probes complete (see limitations)' : ''}`);
 } catch (error) {
   for (const item of report.cases) if (item.status === 'running') { item.status = 'failed';item.error = error.message; }
   report.status = 'failed';report.error = error.stack;process.exitCode ||= 1;console.error(error.stack);

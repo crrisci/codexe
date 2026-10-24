@@ -6,13 +6,14 @@ the remaining work separate from those completed checks.
 
 | # | Work | Status | Completion criteria |
 |---|---|---|---|
-| 1 | Close CodeXe CI for the published changes | In progress | Review blocking, postmerge and Xenolith native jobs; resolve actual failures and distinguish Linux/PTL evidence from Windows/Bazel/container checks. |
+| 1 | Close CodeXe CI for the published changes | Deferred (tracked) | Review blocking, postmerge and Xenolith native jobs; resolve actual failures and distinguish Linux/PTL evidence from Windows/Bazel/container checks. |
 | 2 | Consolidate real text/vision acceptance | Completed (PTL, 2026-10-24) | Keep real-weight tests opt-in; verify actual image bytes, successful `view_image`, exact fixture answers, live/restarted conversation resume, owned-process cleanup and reports identifying source/binaries. |
-| 3 | Extend real recovery acceptance | Pending | Cancellation during image encoding, crash with a pending image tool, rewind/fork and image-budget changes recover explicitly without duplicate effects. Demonstrate native KV loads separately from conversation resume. |
+| 3 | Extend real recovery acceptance | Supported paths validated; encoder cancellation pending | Cancellation during image encoding, crash with a pending image tool, rewind/fork and image-budget changes recover explicitly without duplicate effects. Demonstrate native KV loads separately from conversation resume. |
 | 4 | Qualify Panther Lake in the engine | Pending | Record PCI/device, driver, engine/model and repeatable measurements; prepare minimal upstream evidence and evaluate XMX only in the engine project. Do not infer capabilities in clients or publish upstream reports automatically. |
 | 5 | Prepare bridge 0.4.0-rc.2 | Pending | Package the published bridge fixes, verify archive/checksum and clean installation/API acceptance, review CI and release notes; keep persistent bindings experimental. |
 
-Item **2 is complete**. Current focus: **1**; items 3, 4 and 5 remain saved
+Item **2 is complete**. Current focus: **3**; item 1 is deferred at the
+owner's request, with its known failures retained. Items 4 and 5 remain saved
 for subsequent work. Completion of item 2 does not close platform CI, failure
 recovery or hardware qualification. Bridge release work belongs to
 [crrisci/xenolith-bridge](https://github.com/crrisci/xenolith-bridge); hardware
@@ -86,3 +87,39 @@ elliptic-curve/p256 dependencies reached through secrets, AWS credentials,
 user verification and RTC. Item 1 remains open until compatible coordinated
 upstream updates and the platform/test failures are resolved. No vulnerability
 ignore, product-feature removal or failed-test suppression is used to close it.
+
+
+## Item 3 validation record
+
+Opt-in `vision-smoke.mjs --recovery` tested on native Linux/Panther Lake with
+the same engine/model/projector as item 2. All **five recovery probes passed**:
+
+- Offline rewind retains the first image and native session while discarding
+  later turns, with the tool's immutable rollout backup.
+- Changing and restoring the image budget explicitly rebuilds retained media
+  in the same session; byte hashes and exact fixture answers match.
+- Killing the owned CLI after the engine accepts a tool image, while losing
+  the ACK, resumes from the real rollout with one retained tool result and no
+  repeated `view_image` call.
+- Interrupting the client before the image reply reconciles its in-flight
+  binding and recovers the retained image. A tagged PNG fixture avoids reusing
+  identical media bytes from an earlier probe.
+- A real app-server fork replays the original image into a distinct native
+  session, accepts a different image in the fork, and preserves the parent
+  conversation without the fork's image bytes.
+
+The run completed **10/10 CLI vision cases**, both app-server turns and the
+independent post-restart native KV load probe. Focused harness checks passed
+**13/13** on Linux, without weights; the Mac run passed 11 and skipped the two
+Linux-only preflight cases. Reports include source/binary hashes, fault traces,
+fixture bytes and owned-process cleanup. An initial harness failure incorrectly
+classified a user-message notification as a tool effect; its evidence is kept
+and the corrected classifier has regression coverage.
+
+Item 3 remains partial for **cancellation during image encoding**. The current
+engine's protocol v2 prepares images synchronously before replying and exposes
+no observable cancellable encoder boundary. Client interruption before an ACK
+must not be claimed as encoder cancellation. Closing that criterion requires
+engine support, followed by a targeted real acceptance case. No engine change
+or upstream report was published as part of this work. The CI failures in item 1
+remain deferred; they do not block using these opt-in recovery checks.
