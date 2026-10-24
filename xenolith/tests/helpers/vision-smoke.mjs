@@ -41,6 +41,11 @@ export async function imageFixture(workspace, name, exclude) {
   await writeFile(path, bytes, { mode: 0o600 });
   return { path, expected, rgb, sha256: sha256(bytes), bytes: bytes.length };
 }
+export function visionEnv(base, overrides) {
+  const env = { ...base, ...overrides };
+  delete env.XENOLITH_REASONING_BUDGET;delete env.XENOLITH_REASONING_HISTORY;
+  return env;
+}
 export function cliArgs({ workspace, prompt, resume = false, image }) {
   return ['exec', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--sandbox', 'read-only',
     '--json', '-C', workspace, '-c', 'model_reasoning_effort="none"', ...(resume ? ['resume', '--last'] : []),

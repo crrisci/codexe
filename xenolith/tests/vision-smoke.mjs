@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { release, cpus } from 'node:os';
-import { cliArgs, connectWire, imageFixture, phaseEvidence, runClient, sleep, wireObserver } from './helpers/vision-smoke.mjs';
+import { cliArgs, connectWire, imageFixture, phaseEvidence, runClient, sleep, visionEnv, wireObserver } from './helpers/vision-smoke.mjs';
 
 const execute = promisify(execFile), GiB = 1024 ** 3;
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -146,8 +146,8 @@ try {
   report.model = { bytes: (await stat(model)).size, name: basename(model) };
   trace = createWriteStream(join(root, 'wire.jsonl'), { mode: 0o600 });trace.on('error', error => control.abort(error));
   observer = await wireObserver(clientSocket, engineSocket, record => { frames.push(record);trace.write(JSON.stringify(record) + '\n'); });
-  const env = { ...process.env, CODEX_HOME: join(root, 'home'), XENOLITH_STATE_DIR: join(root, 'bindings'),
-    XENOLITH_SOCKET: clientSocket, XENOLITH_NO_SPAWN: '1', XENOLITH_MAX_OUTPUT_TOKENS: '1024', XENOLITH_REASONING_BUDGET: '128' };
+  const env = visionEnv(process.env, { CODEX_HOME: join(root, 'home'), XENOLITH_STATE_DIR: join(root, 'bindings'),
+    XENOLITH_SOCKET: clientSocket, XENOLITH_NO_SPAWN: '1', XENOLITH_MAX_OUTPUT_TOKENS: '1024' });
   const config = { engine: engineBin, model, projector, codex, workspace, env };
   await startEngine('initial', config);
   const original = await invoke('attachment', config, first, { attachment: true,
@@ -183,6 +183,7 @@ try {
   assert.deepEqual(observer.errors, [], 'Wire observer must not hide protocol or connection errors');
   check();report.status = 'passed';console.log('VISION_SMOKE_PASSED 4/4; independent native snapshot probe verified');
 } catch (error) {
+  for (const item of report.cases) if (item.status === 'running') { item.status = 'failed';item.error = error.message; }
   report.status = 'failed';report.error = error.stack;process.exitCode ||= 1;console.error(error.stack);
 } finally {
   wire?.close();

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createConnection, createServer } from 'node:net';
 import { inflateSync } from 'node:zlib';
-import { cliArgs, colors, frameReader, imageFixture, phaseEvidence, runClient, sha256, squarePng, wireObserver } from './helpers/vision-smoke.mjs';
+import { cliArgs, colors, frameReader, imageFixture, phaseEvidence, runClient, sha256, squarePng, visionEnv, wireObserver } from './helpers/vision-smoke.mjs';
 
 async function temporary(t) {
   const root = await mkdtemp(join(tmpdir(), 'vision-harness-'));
@@ -35,9 +35,9 @@ test('real CLI arguments close stdin and keep the prompt separate from variadic 
   const args = cliArgs({ workspace, prompt, image: join(workspace, 'fixture.png') });
   assert.equal(args.at(-2), '--');assert.equal(args.at(-1), prompt);
   assert.equal(args[args.indexOf('--image') + 2], '--');
-  const result = await runClient(process.execPath, ['-e', "let text='';process.stdin.on('data',b=>text+=b);process.stdin.on('end',()=>console.log(JSON.stringify({args:process.argv.slice(1),stdin:text})));", '--', ...args], { timeoutMs: 10000 });
+  const result = await runClient(process.execPath, ['-e', "let text='';process.stdin.on('data',b=>text+=b);process.stdin.on('end',()=>console.log(JSON.stringify({args:process.argv.slice(1),stdin:text,budget:process.env.XENOLITH_REASONING_BUDGET??null,history:process.env.XENOLITH_REASONING_HISTORY??null})));", '--', ...args], { timeoutMs: 10000, env: visionEnv({ ...process.env, XENOLITH_REASONING_BUDGET: '128', XENOLITH_REASONING_HISTORY: 'preserve_tool_calls' }, {}) });
   assert.equal(result.code, 0, result.stderr);assert.equal(result.timed_out, false);
-  assert.deepEqual(JSON.parse(result.stdout), { args, stdin: '' });
+  assert.deepEqual(JSON.parse(result.stdout), { args, stdin: '', budget: null, history: null });
 });
 test('native frame observation handles fragmented UTF-8 and rejects corrupt/oversized frames', () => {
   const frames = [], errors = [], consume = frameReader(f => frames.push(f), e => errors.push(e));
