@@ -67,6 +67,14 @@ Action pin including upstream resolver-layout fixes. Windows wrapper flags use
 response files independently of compiler flags; upstream wrapper tests remain
 in the Bazel matrix alongside the unchanged product target set.
 
+The HTTP-client follow-up isolates native-TLS fallback fixtures in subprocesses
+without inherited CA overrides: Cargo can populate `SSL_CERT_FILE` after the
+workflow unsets it. It also fixes typed TLS failure classification through
+nested I/O wrappers and adds a real Rustls untrusted-certificate handshake
+regression. Native Linux/PTL validation passes all 113 library and 10 custom-CA
+integration tests; the seven fallback fixtures also pass with deliberately
+invalid inherited CA paths. These checks do not establish hosted CI success.
+
 The dependency gate additionally reports RUSTSEC-2026-0387 in crypto-bigint
 0.5.5. The patched 0.7.6 line is not semver-compatible with the current
 elliptic-curve/p256 dependencies reached through secrets, AWS credentials,

@@ -132,3 +132,11 @@ and adds `patches/rules_rust_windows_wrapper_param_file.patch` with matching
 `MODULE.bazel` and Bazel workflow changes. The patch preserves wrapper/compiler
 argument separation while avoiding native Windows command-line limits. It
 includes parser regressions and keeps the existing product test targets enabled.
+
+The HTTP-client CI follow-up modifies
+`codex-rs/http-client/src/route_aware_client_pool.rs`,
+`codex-rs/http-client/src/route_aware_client_pool_tests.rs` and
+`codex-rs/http-client/src/route_aware_tls_fallback_tests.rs`. It preserves typed
+TLS failure classification through nested I/O errors and isolates native-TLS
+fixtures from inherited CA variables without mutating the shared environment.
+These changes retain the Apache-2.0 license.
