@@ -178,3 +178,12 @@ The default CI wildcard runs `test-vision-harness.mjs` without weights to check
 fixture pixels, closed stdin and image argument boundaries, UTF-8 framing,
 byte-preserving observation, and rejection of missing/wrong media, unrelated
 sessions/call IDs or extra tools. It is harness coverage, not real inference.
+
+
+Recorded validation (2026-10-24): implementation
+`6f5bfb7b1d5d0c088a262d1cc659c798d9bfc091` passed all four real vision cases
+and the existing real text smoke on Panther Lake, using Xenolith `1e70253`
+and Gemma-4-26B-A4B-it-qat UD-Q4_K_XL with its F16 projector. The native
+simulator/harness suite passed 48/48 on Linux/Node 22.23.4. See the roadmap for
+remaining platform, recovery and engine qualification work. Real-weight tests
+remain opt-in and these results cover only that configuration.

@@ -7,13 +7,14 @@ the remaining work separate from those completed checks.
 | # | Work | Status | Completion criteria |
 |---|---|---|---|
 | 1 | Close CodeXe CI for the published changes | Pending | Review blocking, postmerge and Xenolith native jobs; resolve actual failures and distinguish Linux/PTL evidence from Windows/Bazel/container checks. |
-| 2 | Consolidate real text/vision acceptance | In progress | Keep real-weight tests opt-in; verify actual image bytes, successful `view_image`, exact fixture answers, live/restarted conversation resume, owned-process cleanup and reports identifying source/binaries. |
+| 2 | Consolidate real text/vision acceptance | Completed (PTL, 2026-10-24) | Keep real-weight tests opt-in; verify actual image bytes, successful `view_image`, exact fixture answers, live/restarted conversation resume, owned-process cleanup and reports identifying source/binaries. |
 | 3 | Extend real recovery acceptance | Pending | Cancellation during image encoding, crash with a pending image tool, rewind/fork and image-budget changes recover explicitly without duplicate effects. Demonstrate native KV loads separately from conversation resume. |
 | 4 | Qualify Panther Lake in the engine | Pending | Record PCI/device, driver, engine/model and repeatable measurements; prepare minimal upstream evidence and evaluate XMX only in the engine project. Do not infer capabilities in clients or publish upstream reports automatically. |
 | 5 | Prepare bridge 0.4.0-rc.2 | Pending | Package the published bridge fixes, verify archive/checksum and clean installation/API acceptance, review CI and release notes; keep persistent bindings experimental. |
 
-Current focus: **2**. Finish it before resuming the other development items.
-CI review (1) can proceed independently. Bridge release work belongs to
+Item **2 is complete**. Items 1, 3, 4 and 5 remain saved for subsequent work;
+completion of this item does not close platform CI, failure recovery or hardware
+qualification. CI review (1) can proceed independently. Bridge release work belongs to
 [crrisci/xenolith-bridge](https://github.com/crrisci/xenolith-bridge); hardware
 qualification belongs to the engine rather than CodeXe or the bridge.
 
@@ -30,3 +31,28 @@ weights are never downloaded by CI or committed. Passing simple color fixtures
 establishes this integration path, not general image understanding. Failure and
 interruption reports must remain inspectable; cleanup may signal only processes
 owned by the test. Ordinary CI continues to use simulators.
+
+
+## Item 2 validation record
+
+Implementation tested: `6f5bfb7b1d5d0c088a262d1cc659c798d9bfc091`.
+On native Linux/Panther Lake with Node 22.23.4, engine
+`1e7025331fdb6bff4d9411e72bc526a86d73b0a0`, Gemma-4-26B-A4B-it-qat
+UD-Q4_K_XL and its F16 projector:
+
+- Real vision: **4/4**, actual PNG attachment, live/restarted resume and a fresh
+  `view_image` conversation with different fixture bytes/color and matching tool ID.
+- Real text smoke: **passed**, successful shell nonce read, raw reasoning,
+  live/restarted resume and separate native KV snapshot probe.
+- Native simulator/harness suite: **48/48**, no skips on Linux. Mac harness
+  checks: 7 passed, one deliberately Linux-only preflight check skipped.
+- Reports retain source/binary/model/projector hashes, wire observations and
+  owned-process cleanup. Raw reports/fixtures stay private and ignored.
+
+The independent probes report actual snapshot loading. In this vision run the
+restarted CLI's own wire terminal also reported `resume.loaded:true` with 9801
+cached tokens; this is a recorded observation for this configuration, not a
+guarantee inferred from conversation resume. The initial configuration error
+(disabled reasoning plus an explicit reasoning budget) is retained in private
+failure evidence; the harness now removes inherited reasoning knobs for its
+explicit no-reasoning vision calls. No production Rust changes were needed.
