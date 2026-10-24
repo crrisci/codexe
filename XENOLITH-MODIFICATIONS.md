@@ -140,3 +140,9 @@ The HTTP-client CI follow-up modifies
 TLS failure classification through nested I/O errors and isolates native-TLS
 fixtures from inherited CA variables without mutating the shared environment.
 These changes retain the Apache-2.0 license.
+
+The Windows manifest test follow-up uses the existing runfiles-aware
+`codex_utils_cargo_bin::cargo_bin` helper in
+`codex-rs/windows-sandbox-rs/tests/helper_manifest.rs`. Cargo and Bazel locate
+the same setup executable before inspecting its manifest; the resource checks
+remain unchanged. This change retains the Apache-2.0 license.

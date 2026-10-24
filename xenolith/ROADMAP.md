@@ -75,6 +75,11 @@ regression. Native Linux/PTL validation passes all 113 library and 10 custom-CA
 integration tests; the seven fallback fixtures also pass with deliberately
 invalid inherited CA paths. These checks do not establish hosted CI success.
 
+The Windows setup-manifest fixture now resolves its helper through the existing
+Cargo/Bazel runfiles-aware locator rather than treating Bazel's logical runfile
+name as a filesystem path. The resource assertions remain unchanged; this fix
+still requires execution in the hosted Windows matrix.
+
 The dependency gate additionally reports RUSTSEC-2026-0387 in crypto-bigint
 0.5.5. The patched 0.7.6 line is not semver-compatible with the current
 elliptic-curve/p256 dependencies reached through secrets, AWS credentials,
