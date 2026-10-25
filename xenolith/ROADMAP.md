@@ -1,6 +1,6 @@
 # Next steps after Panther Lake validation
 
-Updated 2026-10-24. The bridge feedback/KV roadmap and CodeXe sandbox/network
+Updated 2026-10-25. The bridge feedback/KV roadmap and CodeXe sandbox/network
 fixes are published on their respective `main` branches. This checklist keeps
 the remaining work separate from those completed checks.
 
@@ -9,12 +9,13 @@ the remaining work separate from those completed checks.
 | 1 | Close CodeXe CI for the published changes | Deferred (tracked) | Review blocking, postmerge and Xenolith native jobs; resolve actual failures and distinguish Linux/PTL evidence from Windows/Bazel/container checks. |
 | 2 | Consolidate real text/vision acceptance | Completed (PTL, 2026-10-24) | Keep real-weight tests opt-in; verify actual image bytes, successful `view_image`, exact fixture answers, live/restarted conversation resume, owned-process cleanup and reports identifying source/binaries. |
 | 3 | Extend real recovery acceptance | Supported paths validated; encoder cancellation pending | Cancellation during image encoding, crash with a pending image tool, rewind/fork and image-budget changes recover explicitly without duplicate effects. Demonstrate native KV loads separately from conversation resume. |
-| 4 | Qualify Panther Lake in the engine | Pending | Record PCI/device, driver, engine/model and repeatable measurements; prepare minimal upstream evidence and evaluate XMX only in the engine project. Do not infer capabilities in clients or publish upstream reports automatically. |
-| 5 | Prepare bridge 0.4.0-rc.2 | Pending | Package the published bridge fixes, verify archive/checksum and clean installation/API acceptance, review CI and release notes; keep persistent bindings experimental. |
+| 4 | Qualify Panther Lake in the engine | Completed for existing kernels; XMX unqualified | Record PCI/device, driver, engine/model and repeatable measurements; prepare minimal upstream evidence and evaluate XMX only in the engine project. Do not infer capabilities in clients or publish upstream reports automatically. |
+| 5 | Prepare bridge 0.4.0-rc.2 | Candidate packaged; exact-archive real acceptance pending | Package the published bridge fixes, verify archive/checksum and clean installation/API acceptance, review CI and release notes; keep persistent bindings experimental. |
 
-Item **2 is complete**. Current focus: **3**; item 1 is deferred at the
-owner's request, with its known failures retained. Items 4 and 5 remain saved
-for subsequent work. Completion of item 2 does not close platform CI, failure
+Item **2 is complete**. Item **3** is validated for supported paths, with
+encoder cancellation requiring engine work. Item **4** is complete for the
+existing non-XMX kernels. Current focus: **5**. Item 1 remains deferred at the
+owner's request, with its known failures retained. Completion of item 2 does not close platform CI, failure
 recovery or hardware qualification. Bridge release work belongs to
 [crrisci/xenolith-bridge](https://github.com/crrisci/xenolith-bridge); hardware
 qualification belongs to the engine rather than CodeXe or the bridge.
@@ -123,3 +124,63 @@ must not be claimed as encoder cancellation. Closing that criterion requires
 engine support, followed by a targeted real acceptance case. No engine change
 or upstream report was published as part of this work. The CI failures in item 1
 remain deferred; they do not block using these opt-in recovery checks.
+
+
+## Item 4 validation record
+
+Native Linux/PTL inventory and measurements identify Core Ultra X7 358H,
+Arc B390 PCI `8086:b080`, kernel `xe` on Ubuntu 26.04.1/Linux 7.0.0-38,
+Compute Runtime/Level Zero GPU driver 26.05.37020.3 and loader 1.28.2.
+The unchanged engine is `1e7025331fdb6bff4d9411e72bc526a86d73b0a0`, with
+Gemma-4-26B-A4B-it-qat UD-Q4_K_XL. No client hardware heuristics were added.
+
+Five focused numerical GPU executables passed: KV, snapshots, KV store,
+prefill route-reset and visual attention/ring. Separately, the full
+`make check-gpu` entry point was blocked by its host ASan prerequisite:
+the runtime-order check fails while the shared system preloads OneAgent;
+a static-ASan probe also failed. No system preload change or sanitizer/test
+suppression was used. The five executable results are not a claim that the
+complete make target passed.
+
+| Context capacity | pp512 tokens/s | pp2048 tokens/s | tg128 tokens/s |
+|---|---:|---:|---:|
+| 65536 | 460.21 | 421.66 | 31.36 |
+| 131072 | 458.18 | 420.92 | 31.37 |
+
+These are medians of three rates per shape with text batch 512, srand(1),
+reset between repetitions, full prefill warmup and one-token decode warmup.
+Loading/warmup are excluded; decode consumes synthetic IDs from an empty
+context. The shared host used powersave governors without locked clocks;
+load/memory/temperature and individual samples were retained. The monitor
+waited for other Xenolith owners and checked during runs. No Lunar Lake,
+llama.cpp, XMX speedup or confidence-interval comparison is claimed.
+
+CPUID inventory shows Core-type CPUs 0-3 and Atom-type CPUs 4-15. The current
+fixed worker mask 0/2/4/6/8/10 selects two Core-type and four Atom-type cores,
+not the original six-P-core profile. Topology-aware affinity needs a separate
+controlled experiment. The driver advertises matrix-MAC capability, but the
+engine has no corresponding XMX kernel path; enabling it requires engine
+implementation and numerical/model/performance validation.
+
+A privacy-filtered upstream report, 18-sample CSV and a narrowly scoped b080
+status/table proposal are prepared privately. The proposal was not applied or
+submitted upstream; measurements describe the unchanged engine. Other Panther
+Lake device IDs remain unqualified by this work.
+
+
+## Item 5 progress
+
+Bridge candidate `0.4.0-rc.2` is packaged at
+`crrisci/xenolith-bridge` commit `59e5c17f8db650b6da74c1c48ce45eedae15ece5`.
+Only version metadata and release documentation changed from validated
+`97a9dfd`; runtime and tests are unchanged. Npm and source archives have SHA256
+sidecars and pass independent offline installation, doctor and both JSON API
+simulator checks. The exact npm archive also passes on Linux/Node 22.23.4.
+The candidate's pinned Linux/macOS Node 22/24 CI matrix is green (run
+`40110303367`). Persistent bindings remain experimental; stable stays 0.3.0.
+
+The final exact-archive real-engine battery remains a separate gate. A foreign
+steering chat currently owns the shared test machine; the release driver waits
+without interrupting it. Earlier source/development real-engine runs do not
+stand in for this archive's acceptance. No publication tag is created before
+that remaining gate is reviewed.
