@@ -10,11 +10,11 @@ the remaining work separate from those completed checks.
 | 2 | Consolidate real text/vision acceptance | Completed (PTL, 2026-10-24) | Keep real-weight tests opt-in; verify actual image bytes, successful `view_image`, exact fixture answers, live/restarted conversation resume, owned-process cleanup and reports identifying source/binaries. |
 | 3 | Extend real recovery acceptance | Supported paths validated; encoder cancellation pending | Cancellation during image encoding, crash with a pending image tool, rewind/fork and image-budget changes recover explicitly without duplicate effects. Demonstrate native KV loads separately from conversation resume. |
 | 4 | Qualify Panther Lake in the engine | Completed for existing kernels; XMX unqualified | Record PCI/device, driver, engine/model and repeatable measurements; prepare minimal upstream evidence and evaluate XMX only in the engine project. Do not infer capabilities in clients or publish upstream reports automatically. |
-| 5 | Prepare bridge 0.4.0-rc.2 | Candidate packaged; exact-archive real acceptance pending | Package the published bridge fixes, verify archive/checksum and clean installation/API acceptance, review CI and release notes; keep persistent bindings experimental. |
+| 5 | Prepare bridge 0.4.0-rc.2 | Completed and published | Package the published bridge fixes, verify archive/checksum and clean installation/API acceptance, review CI and release notes; keep persistent bindings experimental. |
 
 Item **2 is complete**. Item **3** is validated for supported paths, with
 encoder cancellation requiring engine work. Item **4** is complete for the
-existing non-XMX kernels. Current focus: **5**. Item 1 remains deferred at the
+existing non-XMX kernels. Item **5** is complete and published. Item 1 remains deferred at the
 owner's request, with its known failures retained. Completion of item 2 does not close platform CI, failure
 recovery or hardware qualification. Bridge release work belongs to
 [crrisci/xenolith-bridge](https://github.com/crrisci/xenolith-bridge); hardware
@@ -168,19 +168,32 @@ submitted upstream; measurements describe the unchanged engine. Other Panther
 Lake device IDs remain unqualified by this work.
 
 
-## Item 5 progress
+## Item 5 completion record
 
-Bridge candidate `0.4.0-rc.2` is packaged at
-`crrisci/xenolith-bridge` commit `59e5c17f8db650b6da74c1c48ce45eedae15ece5`.
-Only version metadata and release documentation changed from validated
-`97a9dfd`; runtime and tests are unchanged. Npm and source archives have SHA256
-sidecars and pass independent offline installation, doctor and both JSON API
-simulator checks. The exact npm archive also passes on Linux/Node 22.23.4.
-The candidate's pinned Linux/macOS Node 22/24 CI matrix is green (run
-`40110303367`). Persistent bindings remain experimental; stable stays 0.3.0.
+[Bridge 0.4.0-rc.2](https://github.com/crrisci/xenolith-bridge/releases/tag/v0.4.0-rc.2)
+is published as a prerelease at tag `v0.4.0-rc.2`, commit
+`9f2a381dcba5db0cf5344e6085acfd32dbd4cbe6`. Stable remains 0.3.0;
+persistent bindings remain experimental.
 
-The final exact-archive real-engine battery remains a separate gate. A foreign
-steering chat currently owns the shared test machine; the release driver waits
-without interrupting it. Earlier source/development real-engine runs do not
-stand in for this archive's acceptance. No publication tag is created before
-that remaining gate is reviewed.
+The independently installed npm archive passed all **4/4 real-engine cases**
+on Linux/PTL/Node 22.23.4: Responses JSON/SSE and Chat JSON/SSE, actual fixture
+reads, pending-tool continuation across engine/bridge restart with explicitly
+loaded native snapshots, and cancellation/recovery for both SSE modes.
+The run closed its owned engines and bridge processes before the machine was
+released for other benchmarks. No subsequent PTL use was needed for publication.
+
+The tag's pinned Linux/macOS Node 22/24 CI matrix and release job passed
+(run `40201157939`); the separate upcoming-client probe also passed.
+Both published archives and their checksum sidecars were downloaded from
+GitHub, verified and independently installed again for CLI/doctor and JSON API
+checks. Their complete payloads and bytes match the prepared candidates.
+The npm asset is the byte-exact artifact used for real-engine acceptance:
+
+- npm SHA256: `ea6e49680c2e6b1310c42358921ca473da13c77cbaa652a5c4bb3f6ace37dac7`.
+- source SHA256: `c5940d5501464a275948a5914079b165d9854afc383e8ba31e13da1a4fb934fa`.
+
+The CI npm repack initially had identical file contents but different archive
+metadata. The published npm asset and its sidecar were aligned to the already
+accepted archive; final downloads confirmed byte identity. Raw reports remain
+private. Release notes record the scoped acceptance result without uploading
+private fixtures or traces.
