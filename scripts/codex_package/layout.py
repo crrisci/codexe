@@ -5,6 +5,10 @@ import shutil
 import stat
 from pathlib import Path
 
+from .native import stage_native_installer
+from .native import strip_staged_elf_files
+from .native import write_native_checksums
+from .notices import stage_package_notices
 from .targets import PackageInputs
 from .targets import PackageVariant
 from .targets import TargetSpec
@@ -36,6 +40,9 @@ def build_package_dir(
     variant: PackageVariant,
     spec: TargetSpec,
     inputs: PackageInputs,
+    *,
+    native_config: bool = False,
+    strip_tool: str | None = None,
 ) -> None:
     bin_dir = package_dir / "bin"
     resources_dir = package_dir / "codex-resources"
@@ -79,6 +86,8 @@ def build_package_dir(
             is_windows=True,
         )
 
+    stage_package_notices(package_dir)
+
     metadata = {
         "layoutVersion": LAYOUT_VERSION,
         "version": version,
@@ -89,7 +98,14 @@ def build_package_dir(
         "resourcesDir": "codex-resources",
         "pathDir": "codex-path",
     }
+    if native_config:
+        metadata["xenolith"] = {"nativeConfig": 1}
+        stage_native_installer(package_dir)
     write_json(package_dir / "codex-package.json", metadata)
+    if strip_tool is not None:
+        strip_staged_elf_files(package_dir, strip_tool)
+    if native_config:
+        write_native_checksums(package_dir)
 
 
 def validate_package_dir(

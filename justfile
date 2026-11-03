@@ -41,6 +41,11 @@ code-mode-host *args:
 assemble-codex-package *args:
     {{ python }} {{ justfile_directory() }}/scripts/build_codex_package.py {args}
 
+# Build and install the complete CodeXe package (PREFIX or --prefix selects root).
+[no-cd]
+install-codexe *args:
+    {{ python }} "{{ justfile_directory() }}/scripts/install_codexe.py" {args}
+
 # Build the CLI and run the app-server test client
 app-server-test-client *args:
     cargo build -p codex-cli

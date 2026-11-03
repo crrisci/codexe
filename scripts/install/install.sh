@@ -2,6 +2,13 @@
 
 set -eu
 
+# CodeXe local mode is opt-in; the upstream Codex flow remains the default.
+COMMAND_NAME=codex
+CODEXE_MODE=0
+CODEXE_LOCAL_DIR=""
+CODEXE_ARCHIVE=""
+CODEXE_PREFIX="${PREFIX:-$HOME/.local}"
+CODEXE_BIN_DIR=""
 RELEASE="${CODEX_RELEASE:-latest}"
 NON_INTERACTIVE="${CODEX_NON_INTERACTIVE:-false}"
 DAEMON_ONLY="${CODEX_INSTALL_DAEMON_ONLY:-0}"
@@ -83,6 +90,20 @@ validate_version() {
 parse_args() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --codexe)
+        CODEXE_MODE=1
+        ;;
+      --package-dir | --package-archive | --prefix | --bin-dir)
+        if [ "$#" -lt 2 ]; then echo "$1 requires a value." >&2; exit 1; fi
+        case "$1" in
+          --package-dir) CODEXE_LOCAL_DIR="$2" ;;
+          --package-archive) CODEXE_ARCHIVE="$2" ;;
+          --prefix) CODEXE_PREFIX="$2" ;;
+          --bin-dir) CODEXE_BIN_DIR="$2" ;;
+        esac
+        CODEXE_LOCAL_ARGUMENTS=1
+        shift
+        ;;
       --release)
         if [ "$#" -lt 2 ]; then
           echo "--release requires a value." >&2
@@ -94,6 +115,12 @@ parse_args() {
       --help | -h)
         cat <<EOF
 Usage: install.sh [--release VERSION]
+       install.sh --codexe (--package-dir DIR | --package-archive TAR.GZ)
+                  [--prefix ABSOLUTE_ROOT] [--bin-dir ABSOLUTE_BIN]
+
+CodeXe mode installs a complete local native package, never downloads upstream
+Codex, and does not edit profiles/configuration or launch inference. PREFIX
+(default ~/.local) selects storage and the default bin directory.
 
 Environment:
   CODEX_RELEASE          Version to install; overridden by --release.
@@ -754,7 +781,7 @@ cleanup_stale_install_artifacts() {
   find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -name '.staging.*' -exec rm -rf {} +
   find "$STANDALONE_ROOT" -mindepth 1 -maxdepth 1 -name '.current.*' -exec rm -f {} +
 
-  if [ "$DAEMON_ONLY" != "1" ] && [ -d "$BIN_DIR" ]; then
+  if [ "$DAEMON_ONLY" != "1" ] && [ "${CODEXE_MODE:-0}" != 1 ] && [ -d "$BIN_DIR" ]; then
     find "$BIN_DIR" -mindepth 1 -maxdepth 1 -name '.codex.*' -exec rm -f {} +
   fi
 }
@@ -1117,7 +1144,11 @@ install_package_release() {
   mkdir -p "$RELEASES_DIR"
   rm -rf "$stage_release"
   mkdir -p "$stage_release"
-  tar -xzf "$archive_path" -C "$stage_release"
+  if [ "${CODEXE_MODE:-0}" = 1 ]; then
+    cp -R "$CODEXE_LOCAL_DIR/." "$stage_release/"
+  else
+    tar -xzf "$archive_path" -C "$stage_release"
+  fi
   chmod 0755 \
     "$stage_release/bin/codex" \
     "$stage_release/bin/codex-code-mode-host" \
@@ -1170,7 +1201,7 @@ release_dir_is_complete() {
   layout="$4"
 
   [ -d "$release_dir" ] &&
-    [ "$(basename "$release_dir")" = "$expected_version-$expected_target" ] ||
+    [ "$(basename "$release_dir")" = "${CODEXE_RELEASE_NAME:-$expected_version-$expected_target}" ] ||
     return 1
 
   case "$layout" in
@@ -1202,6 +1233,13 @@ release_dir_is_complete() {
       ;;
   esac
 
+  if [ "${CODEXE_MODE:-0}" = 1 ]; then
+    codexe_validate_tree "$release_dir" "$native_source_hash"
+    installed_version="$(codexe_probe version_from_binary "$release_dir/bin/codex")"
+    [ "$installed_version" = "$expected_version" ]
+    return
+  fi
+
   installed_version="$(version_from_binary "$release_dir/bin/codex" || version_from_binary "$release_dir/codex" || true)"
   [ "$installed_version" = "$expected_version" ]
 }
@@ -1226,6 +1264,15 @@ release_codex_relative_path() {
 update_visible_command() {
   release_dir="$1"
   mkdir -p "$BIN_DIR"
+  if [ "${CODEXE_MODE:-0}" = 1 ]; then
+    # current/bin/codex stays stable across releases. ln never replaces a race.
+    if [ ! -e "$BIN_PATH" ] && [ ! -L "$BIN_PATH" ]; then
+      ln -s "$CURRENT_LINK/bin/codex" "$BIN_PATH"
+    else
+      [ -L "$BIN_PATH" ] && [ "$(readlink "$BIN_PATH")" = "$CURRENT_LINK/bin/codex" ] || codexe_fail "Unrelated command appeared at $BIN_PATH"
+    fi
+    return
+  fi
   tmp_link="$BIN_DIR/.codex.$$"
   codex_relative_path="$(release_codex_relative_path "$release_dir")"
 
@@ -1250,6 +1297,18 @@ verify_visible_command() {
 }
 
 parse_args "$@"
+
+if [ "$CODEXE_MODE" = 1 ]; then
+  installer_support="$(dirname "$0")/codexe-local.sh"
+  [ -f "$installer_support" ] || { echo "Missing CodeXe local package support beside install.sh." >&2; exit 1; }
+  . "$installer_support"
+  codexe_local_install
+  exit 0
+fi
+if [ "${CODEXE_LOCAL_ARGUMENTS:-0}" = 1 ]; then
+  echo "Local package/prefix options require --codexe; no upstream download was attempted." >&2
+  exit 1
+fi
 
 require_command mktemp
 require_command tar

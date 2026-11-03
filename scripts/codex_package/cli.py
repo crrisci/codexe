@@ -1,6 +1,7 @@
 """Command-line interface for building Codex package directories."""
 
 import argparse
+import shutil
 import re
 import tempfile
 from pathlib import Path
@@ -10,8 +11,8 @@ from .cargo import build_source_binaries
 from .layout import build_package_dir
 from .layout import prepare_package_dir
 from .layout import validate_package_dir
+from .native import source_supports_native_config
 from .ripgrep import resolve_rg_bin
-from .symbols import strip_binary
 from .targets import PACKAGE_VARIANTS
 from .targets import TARGET_SPECS
 from .targets import PackageInputs
@@ -111,18 +112,8 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--strip",
-        choices=("auto", "all", "none"),
-        default="auto",
-        help=(
-            "Strip Unix first-party package binaries: auto strips source-built "
-            "release-profile inputs, all also strips other profiles and prebuilt "
-            "inputs, none preserves symbols. "
-            "Original inputs and third-party resources are never modified."
-        ),
-    )
-    parser.add_argument(
-        "--strip-tool",
-        help="Target-compatible strip executable override, for example llvm-strip.",
+        action="store_true",
+        help="Linux packages only: strip staged ELF copies before checksums; requires binutils strip. Inputs are preserved.",
     )
     parser.add_argument(
         "--entrypoint-bin",
@@ -131,6 +122,11 @@ def create_parser() -> argparse.ArgumentParser:
             "Optional prebuilt entrypoint executable for the selected package "
             "variant. If omitted, the entrypoint is built with Cargo."
         ),
+    )
+    parser.add_argument(
+        "--attest-xenolith-native-config",
+        action="store_true",
+        help="Maintainer declaration: the supplied prebuilt CLI has verified Xenolith native config v1 support.",
     )
     parser.add_argument(
         "--code-mode-host-bin",
@@ -193,6 +189,30 @@ def assemble_package(args: argparse.Namespace) -> Path:
     """Build the directory before optional downstream additions and archiving."""
     spec = TARGET_SPECS[getattr(args, "target", None) or default_target()]
     variant = PACKAGE_VARIANTS[args.variant]
+    strip_tool = None
+    if args.strip:
+        if not spec.is_linux:
+            raise RuntimeError("--strip supports Linux package targets only")
+        strip_tool = shutil.which("strip")
+        if strip_tool is None:
+            raise RuntimeError("--strip requires the binutils strip command on PATH")
+
+    native_source = source_supports_native_config()
+    if args.attest_xenolith_native_config and (
+        not native_source
+        or args.entrypoint_bin is None
+        or variant.name != "codex"
+        or not spec.is_linux
+    ):
+        raise RuntimeError(
+            "Native attestation requires a verified prebuilt Linux CLI and this fork's native source integration"
+        )
+    native_config = (
+        variant.name == "codex"
+        and spec.is_linux
+        and native_source
+        and (args.entrypoint_bin is None or args.attest_xenolith_native_config)
+    )
     package_dir_arg = getattr(args, "package_dir", None)
     package_dir = (
         package_dir_arg.resolve()
@@ -246,19 +266,18 @@ def assemble_package(args: argparse.Namespace) -> Path:
         codex_windows_sandbox_setup_bin=source_outputs.codex_windows_sandbox_setup_bin,
     )
     prepare_package_dir(package_dir, force=args.force)
-    build_package_dir(package_dir, args.package_version, variant, spec, inputs)
-    for filename, prebuilt in (
-        (variant.entrypoint_name(spec), args.entrypoint_bin),
-        (f"codex-code-mode-host{spec.exe_suffix}", args.code_mode_host_bin),
-        (f"codex-exec-server{spec.exe_suffix}", args.exec_server_bin),
-    ):
-        if args.strip == "all" or (
-            args.strip == "auto"
-            and args.cargo_profile == "release"
-            and prebuilt is None
-        ):
-            strip_binary(package_dir / "bin" / filename, spec, tool=args.strip_tool)
-    validate_package_dir(package_dir, variant, spec)
+    build_package_dir(
+        package_dir,
+        args.package_version,
+        variant,
+        spec,
+        inputs,
+        native_config=native_config,
+        strip_tool=strip_tool,
+    )
+    validate_package_dir(
+        package_dir, variant, spec
+    )
     return package_dir
 
 

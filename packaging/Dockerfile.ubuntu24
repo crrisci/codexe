@@ -1,0 +1,10 @@
+# Component-owned build environment; no engine or GPU driver dependencies.
+FROM rust:1.95.0-slim-bookworm AS rust
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+COPY --from=rust /usr/local/cargo /usr/local/cargo
+COPY --from=rust /usr/local/rustup /usr/local/rustup
+ENV RUSTUP_HOME=/usr/local/rustup PATH=/usr/local/cargo/bin:$PATH
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential binutils ca-certificates curl git python3 pkg-config cmake clang \
+    libssl-dev zlib1g-dev libbrotli-dev libzstd-dev libcap-dev protobuf-compiler \
+    libasound2-dev bubblewrap && rm -rf /var/lib/apt/lists/*
