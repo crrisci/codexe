@@ -1,3 +1,5 @@
+> CodeXe uses `codexe-ci.yml` and `codexe-release.yml`. See [the fork maintenance policy](../../UPSTREAM.md). The strategy below describes the retained upstream workflows.
+
 # Workflow Strategy
 
 The workflows in this directory are split so that pull requests get fast, review-friendly signal while `main` still gets the full cross-platform verification pass.

@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   metadata:
+    if: ${{ github.repository == 'openai/codex' }}
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.release_tag.outputs.release_tag }}
@@ -58,6 +59,7 @@ jobs:
           echo "release_tag=${release_tag}" >> "$GITHUB_OUTPUT"
 
   build:
+    if: ${{ github.repository == 'openai/codex' }}
     name: Build ${{ matrix.variant }} ${{ matrix.target }}
     needs: metadata
     runs-on: ${{ matrix.runner }}
@@ -275,6 +277,7 @@ jobs:
           path: dist/${{ matrix.target }}/*
 
   build-windows-source:
+    if: ${{ github.repository == 'openai/codex' }}
     name: Build ptrcomp-sandbox ${{ matrix.target }} from source
     needs: metadata
     runs-on: ${{ matrix.runner }}
@@ -426,6 +429,7 @@ jobs:
           path: dist/${{ matrix.target }}/*
 
   publish-release:
+    if: ${{ github.repository == 'openai/codex' }}
     needs:
       - metadata
       - build

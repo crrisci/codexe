@@ -25,6 +25,7 @@ concurrency:
 
 jobs:
   tag-check:
+    if: ${{ github.repository == 'openai/codex' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -57,6 +58,7 @@ jobs:
           echo "::endgroup::"
 
   build:
+    if: ${{ github.repository == 'openai/codex' }}
     needs: tag-check
     name: Build - ${{ matrix.runner }} - ${{ matrix.target }} - ${{ matrix.bundle }} - ${{ matrix.build-system }}
     # Release Cargo artifacts only while Bazel releases are disabled.
@@ -567,6 +569,7 @@ jobs:
             codex-rs/dist/${{ matrix.target }}/*
 
   build-macos-voice:
+    if: ${{ github.repository == 'openai/codex' }}
     needs: tag-check
     name: Build voice runtime - ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
@@ -631,8 +634,8 @@ jobs:
           if-no-files-found: error
 
   sign-macos-binaries:
+    if: ${{ github.repository == 'openai/codex' && (always() && needs.build.result == 'success' && needs.build-macos-voice.result == 'success') }}
     needs: [build, build-macos-voice]
-    if: ${{ always() && needs.build.result == 'success' && needs.build-macos-voice.result == 'success' }}
     name: Sign macOS binaries - ${{ matrix.target }} - ${{ matrix.bundle }} - ${{ matrix.build-system }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -877,6 +880,7 @@ jobs:
           if-no-files-found: warn
 
   package-macos:
+    if: ${{ github.repository == 'openai/codex' }}
     needs: sign-macos-binaries
     name: Package macOS artifacts - ${{ matrix.target }} - ${{ matrix.bundle }} - ${{ matrix.build-system }}
     runs-on: macos-15-xlarge
@@ -1164,6 +1168,7 @@ jobs:
           if-no-files-found: error
 
   sign-macos-dmg:
+    if: ${{ github.repository == 'openai/codex' }}
     needs: package-macos
     name: Sign macOS DMG - ${{ matrix.target }} - ${{ matrix.build-system }}
     runs-on: ubuntu-latest
@@ -1266,6 +1271,7 @@ jobs:
           if-no-files-found: warn
 
   finalize-macos:
+    if: ${{ github.repository == 'openai/codex' }}
     needs:
       - package-macos
       - sign-macos-dmg
@@ -1532,8 +1538,8 @@ jobs:
   # Keep provisioned packages separate from the legacy CLI/npm/installer layout.
   # Desktop consumes the versioned codex-provisioned manifest from this release.
   provisioned-macos-candidate:
+    if: ${{ github.repository == 'openai/codex' && (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/rust-v') && vars.CODEX_PROVISIONED_MACOS_CANDIDATE == 'true') }}
     needs: finalize-macos
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/rust-v') && vars.CODEX_PROVISIONED_MACOS_CANDIDATE == 'true'
     permissions:
       contents: read
       id-token: write
@@ -1541,11 +1547,13 @@ jobs:
     secrets: inherit
 
   build-windows:
+    if: ${{ github.repository == 'openai/codex' }}
     needs: tag-check
     uses: ./.github/workflows/rust-release-windows.yml
     secrets: inherit
 
   argument-comment-lint-release-assets:
+    if: ${{ github.repository == 'openai/codex' }}
     name: argument-comment-lint release assets
     needs: tag-check
     uses: ./.github/workflows/rust-release-argument-comment-lint.yml
@@ -1553,6 +1561,7 @@ jobs:
       publish: true
 
   stage-npm-packages:
+    if: ${{ github.repository == 'openai/codex' }}
     name: stage npm packages
     needs:
       - build
@@ -1605,6 +1614,7 @@ jobs:
           if-no-files-found: error
 
   release:
+    if: ${{ github.repository == 'openai/codex' && (always() && needs.tag-check.result == 'success' && needs.build.result == 'success' && needs.finalize-macos.result == 'success' && needs.build-windows.result == 'success' && needs.argument-comment-lint-release-assets.result == 'success' && needs.stage-npm-packages.result == 'success' && (needs.provisioned-macos-candidate.result == 'success' || (vars.CODEX_PROVISIONED_MACOS_CANDIDATE != 'true' && needs.provisioned-macos-candidate.result == 'skipped'))) }}
     # Each job checks its channel under this lock; out-of-order builds cannot
     # roll back GitHub, npm, R2, or the canary branch.
     concurrency: &release-publication
@@ -1619,19 +1629,6 @@ jobs:
       - argument-comment-lint-release-assets
       - stage-npm-packages
       - provisioned-macos-candidate
-    if: >-
-      ${{
-        always() &&
-        needs.tag-check.result == 'success' &&
-        needs.build.result == 'success' &&
-        needs.finalize-macos.result == 'success' &&
-        needs.build-windows.result == 'success' &&
-        needs.argument-comment-lint-release-assets.result == 'success' &&
-        needs.stage-npm-packages.result == 'success' &&
-        (needs.provisioned-macos-candidate.result == 'success' ||
-          (vars.CODEX_PROVISIONED_MACOS_CANDIDATE != 'true' &&
-            needs.provisioned-macos-candidate.result == 'skipped'))
-      }}
     name: release
     runs-on: ubuntu-latest
     permissions:
@@ -1803,9 +1800,9 @@ jobs:
             --draft=false --latest="$MAKE_LATEST"
 
   publish-r2-assets:
+    if: ${{ github.repository == 'openai/codex' && (!cancelled() && needs.release.result == 'success') }}
     name: publish-r2-assets
     needs: release
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
     permissions:
       contents: read
     uses: ./.github/workflows/r2-release.yml
@@ -1817,16 +1814,10 @@ jobs:
       stage: assets
 
   publish-r2:
+    if: ${{ github.repository == 'openai/codex' && (!cancelled() && needs.release.result == 'success' && needs.publish-dotslash.result == 'success' && needs.publish-r2-assets.result == 'success') }}
     concurrency: *release-publication
     name: publish-r2
     needs: [release, publish-dotslash, publish-r2-assets]
-    if: >-
-      ${{
-        !cancelled() &&
-        needs.release.result == 'success' &&
-        needs.publish-dotslash.result == 'success' &&
-        needs.publish-r2-assets.result == 'success'
-      }}
     permissions:
       contents: read
     uses: ./.github/workflows/r2-release.yml
@@ -1838,9 +1829,9 @@ jobs:
       stage: finalize
 
   publish-dotslash:
+    if: ${{ github.repository == 'openai/codex' && (!cancelled() && needs.release.result == 'success') }}
     name: publish-dotslash
     needs: release
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -1872,14 +1863,9 @@ jobs:
   # July 31, 2025: https://github.blog/changelog/2025-07-31-npm-trusted-publishing-with-oidc-is-generally-available/
   # npm docs: https://docs.npmjs.com/trusted-publishers
   publish-npm:
+    if: ${{ github.repository == 'openai/codex' && (!cancelled() && needs.release.result == 'success' && needs.release.outputs.should_publish_npm == 'true') }}
     concurrency: *release-publication
     # Publish to npm for stable releases, numbered alphas, and alpha hotfixes.
-    if: >-
-      ${{
-        !cancelled() &&
-        needs.release.result == 'success' &&
-        needs.release.outputs.should_publish_npm == 'true'
-      }}
     name: publish-npm
     needs: release
     runs-on: ubuntu-latest
@@ -2062,16 +2048,11 @@ jobs:
           retention-days: 7
 
   deploy-dev-website:
+    if: ${{ github.repository == 'openai/codex' && (!cancelled() && needs.release.result == 'success' && !contains(needs.release.outputs.version, '-')) }}
     name: Trigger developers.openai.com deploy
     needs: release
     # Only trigger the deploy for a stable release.
     # The deploy updates developers.openai.com with the new config schema json file.
-    if: >-
-      ${{
-        !cancelled() &&
-        needs.release.result == 'success' &&
-        !contains(needs.release.outputs.version, '-')
-      }}
     runs-on: ubuntu-latest
     continue-on-error: true
     permissions: {}
@@ -2091,17 +2072,12 @@ jobs:
           fi
 
   winget:
+    if: ${{ github.repository == 'openai/codex' && (!cancelled() && needs.release.result == 'success' && !contains(needs.release.outputs.version, '-')) }}
     concurrency: *release-publication
     name: winget
     needs: release
     # Only publish stable/mainline releases to WinGet; pre-releases include a
     # '-' in the semver string (e.g., 1.2.3-alpha.1).
-    if: >-
-      ${{
-        !cancelled() &&
-        needs.release.result == 'success' &&
-        !contains(needs.release.outputs.version, '-')
-      }}
     # komac opens the winget-pkgs PR using the published Windows archives;
     # it runs on Linux and does not execute the Windows binaries.
     runs-on: ubuntu-latest
@@ -2153,16 +2129,9 @@ jobs:
           komac cleanup --only-merged
 
   update-branch:
+    if: ${{ github.repository == 'openai/codex' && (!cancelled() && needs.release.result == 'success' && needs.release.outputs.npm_tag == 'alpha' && needs.publish-r2.result == 'success' && needs.publish-npm.result == 'success') }}
     concurrency: *release-publication
     name: Update latest-alpha-cli branch
-    if: >-
-      ${{
-        !cancelled() &&
-        needs.release.result == 'success' &&
-        needs.release.outputs.npm_tag == 'alpha' &&
-        needs.publish-r2.result == 'success' &&
-        needs.publish-npm.result == 'success'
-      }}
     permissions:
       contents: write
     # R2 waits for the GitHub release and DotSlash release-asset uploads.

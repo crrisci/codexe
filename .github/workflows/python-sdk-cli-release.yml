@@ -45,9 +45,9 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
   prepare-python-runtime:
+    if: ${{ github.repository == 'openai/codex' && (needs.resolve-cli-release.outputs.publish == 'true') }}
     name: prepare-python-runtime
     needs: resolve-cli-release
-    if: needs.resolve-cli-release.outputs.publish == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/python-runtime-build.yml
@@ -56,9 +56,9 @@ jobs:
       source_ref: ${{ needs.resolve-cli-release.outputs.source_sha }}
 
   build-python-sdk:
+    if: ${{ github.repository == 'openai/codex' && (needs.resolve-cli-release.outputs.publish == 'true') }}
     name: build-python-sdk
     needs: resolve-cli-release
-    if: needs.resolve-cli-release.outputs.publish == 'true'
     permissions:
       contents: read
     uses: ./.github/workflows/python-sdk-build.yml
@@ -115,6 +115,7 @@ jobs:
             openai-codex-cli-bin "$PYTHON_RUNTIME_VERSION"
 
   publish-python-sdk:
+    if: ${{ github.repository == 'openai/codex' }}
     name: publish-python-sdk
     needs:
       - build-python-sdk

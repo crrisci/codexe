@@ -67,6 +67,7 @@ jobs:
           PY
 
   prepare-python-runtime:
+    if: ${{ github.repository == 'openai/codex' }}
     name: prepare-python-runtime
     needs: resolve-python-release
     permissions:
@@ -76,6 +77,7 @@ jobs:
       runtime_version: ${{ needs.resolve-python-release.outputs.runtime_version }}
 
   build-python-sdk:
+    if: ${{ github.repository == 'openai/codex' }}
     name: build-python-sdk
     needs: resolve-python-release
     permissions:
@@ -132,6 +134,7 @@ jobs:
             openai-codex-cli-bin "$PYTHON_RUNTIME_VERSION"
 
   publish-python-sdk:
+    if: ${{ github.repository == 'openai/codex' }}
     name: publish-python-sdk
     needs:
       - build-python-sdk

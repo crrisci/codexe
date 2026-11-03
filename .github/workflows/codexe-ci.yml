@@ -1,0 +1,155 @@
+# CodeXe fork CI: keep upstream's broad CI opt-in to the upstream repository.
+# Xenolith native integration, Copyright (c) 2026 Francesco Pio Crisci.
+# SPDX-License-Identifier: Apache-2.0
+name: CodeXe CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native:
+    name: Native Linux
+    timeout-minutes: 90
+    runs-on: ubuntu-24.04
+    env:
+      CODEX_REPO_ROOT: ${{ github.workspace }}
+      # Native simulators must fail locally if provider selection regresses.
+      OPENAI_BASE_URL: "http://127.0.0.1:1/v1"
+      OPENAI_API_KEY: "codexe-native-tests-no-cloud"
+      CARGO_INCREMENTAL: "0"
+      RUST_MIN_STACK: "8388608"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: Keep internal reports private
+        run: |
+          python3 - <<'PYCODE'
+          import subprocess
+          forbidden = subprocess.check_output(['git', 'ls-files', '--', 'XENOLITH-VERIFICATION.md', '.test-artifacts/'], text=True)
+          if forbidden:
+              raise SystemExit('Private paths must not be tracked: ' + forbidden)
+          PYCODE
+      - name: Install Linux build and sandbox dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev libcap-dev libasound2-dev bubblewrap
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: rustfmt
+      - name: Prepare Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
+      - name: Check upstream source boundaries
+        run: |
+          python3 .github/scripts/verify_cargo_workspace_manifests.py
+          python3 .github/scripts/verify_tui_core_boundary.py
+      - name: Native wire and backend tests
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-xenolith-wire
+      - name: Test CodeXe package builder
+        run: python3 -m unittest discover -s scripts/codex_package -p 'test_*.py'
+      - name: Test CodeXe local installer
+        run: python3 -m unittest discover -s scripts/install -p 'test_*.py'
+      - name: Test canonical release archive layout and install
+        run: python3 -m unittest discover -s .github/scripts -p 'test_release_archive.py'
+      - name: Test CodeXe source installer helper
+        run: python3 -m unittest discover -s scripts -p 'test_install_codexe.py'
+      - name: Test isolated Linux build recipe
+        run: python3 -m unittest discover -s scripts -p 'test_build_linux.py'
+      - name: Check native formatting
+        working-directory: codex-rs
+        run: |
+          cargo fmt -- --config imports_granularity=Item --check
+      - name: Check acceptance script syntax
+        run: |
+          for script in xenolith/tests/*.mjs; do node --check "$script"; done
+      - name: Prepare matching verified V8 artifacts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-unknown-linux-gnu
+      - name: Build the actual native CLI
+        run: cargo build --locked --manifest-path codex-rs/Cargo.toml -p codex-cli --bin codex -p codex-exec-server-cli --bin codex-exec-server -p codex-code-mode-host --bin codex-code-mode-host -j 2
+      - name: Check built-in Xenolith provider defaults
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-model-provider-info -p codex-config --lib xenolith -j 2
+      - name: Check plugin archive extraction
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core-plugins --lib startup_sync -j 2
+      - name: Check native core configuration
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --lib xenolith -j 2
+      - name: Check failed and incomplete compaction preserves conversation history
+        run: |
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --test all failed_compaction_preserves_history_after_restart -j 2
+          cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-core --test all incomplete_response_during_compaction_is_terminal_and_counted -j 2
+      - name: Check protocol schema fixtures
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-app-server-protocol --lib schema_fixtures_tests -j 2
+      - name: Check native TUI progress and streamed answer integrity
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-tui --lib xenolith -j 2
+      - name: Check CodeXe home selection
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-cli --bin codex codexe_home -j 2
+      - name: Exercise native discovery, reasoning, tools and recovery through the CLI
+        run: |
+          set -euo pipefail
+          export XENOCODEX_NATIVE_CODEX_BIN="${CARGO_TARGET_DIR}/debug/codex"
+          test_cwd="$(mktemp -d /tmp/codexe-native.XXXXXX)"
+          cd "${test_cwd}"
+          node --test --test-concurrency=1 \
+            "${GITHUB_WORKSPACE}"/xenolith/tests/test-*.mjs
+
+  cargo-deny:
+    name: cargo-deny
+    uses: ./.github/workflows/cargo-deny.yml
+
+  windows-cli:
+    name: Windows CLI compatibility
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Prepare matching verified V8 artifacts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-pc-windows-msvc
+      - name: Check CLI on Windows
+        run: cargo check --locked --manifest-path codex-rs/Cargo.toml -p codex-cli --bin codex --target x86_64-pc-windows-msvc -j 2
+      - name: Test provider and configuration defaults on Windows
+        run: cargo test --locked --manifest-path codex-rs/Cargo.toml -p codex-model-provider-info -p codex-config --lib xenolith -j 2
+
+  required:
+    name: CodeXe required
+    if: ${{ always() }}
+    needs:
+      - native
+      - cargo-deny
+      - windows-cli
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Require successful dependencies
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/check_ci_results.py
