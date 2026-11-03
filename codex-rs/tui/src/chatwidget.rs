@@ -386,6 +386,7 @@ mod settings;
 mod settings_popups;
 mod side;
 use self::safety_buffering::SafetyBufferingState;
+mod native_inference;
 mod status_state;
 mod windows_sandbox_prompts;
 use self::status_state::StatusIndicatorState;
@@ -1192,6 +1193,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn pre_draw_tick(&mut self) {
+        self.refresh_native_image_time_at(std::time::Instant::now());
         self.update_due_hook_visibility();
         self.schedule_hook_timer_if_needed();
         self.bottom_pane.pre_draw_tick();

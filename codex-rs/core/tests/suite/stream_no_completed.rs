@@ -74,6 +74,8 @@ async fn retries_on_early_close() {
         project_id: None,
         location: None,
         credential_file: None,
+        mmproj: None,
+        image_budget: None,
         include_internal_metadata: false,
     };
 

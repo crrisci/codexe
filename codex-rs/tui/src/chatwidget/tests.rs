@@ -1,4 +1,6 @@
 //! Exercises `ChatWidget` event handling and rendering invariants.
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
 //!
 //! These tests cover both app-server-native inputs and focused widget helpers. Many assertions are
 //! snapshot-based so that layout regressions and status/header changes show up as stable,
@@ -332,6 +334,9 @@ mod question_notifications_tests;
 
 #[path = "tests/security_setup_tests.rs"]
 mod security_setup_tests;
+
+#[path = "tests/xenolith_inference_tests.rs"]
+mod xenolith_inference_tests;
 
 #[path = "tests/quick_dials_tests.rs"]
 mod quick_dials_tests;

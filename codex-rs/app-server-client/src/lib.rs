@@ -87,6 +87,9 @@ pub use crate::remote::RemoteAppServerEndpoint;
 /// module exists so clients can remove a direct `codex-core` dependency
 /// while legacy startup/config paths are migrated to RPCs.
 pub mod legacy_core {
+    #[cfg(unix)]
+    pub use codex_core::xenolith;
+
     pub mod config {
         pub use codex_core::config::*;
 
@@ -899,16 +902,24 @@ mod tests {
     use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
 
     async fn build_test_config() -> Config {
-        match ConfigBuilder::default().build().await {
+        match ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
+            .build()
+            .await
+        {
             Ok(config) => config,
-            Err(_) => Config::load_default_with_cli_overrides(Vec::new())
-                .await
-                .expect("default config should load"),
+            Err(_) => Config::load_default_with_cli_overrides(vec![(
+                "model_provider".to_string(),
+                "openai".into(),
+            )])
+            .await
+            .expect("default config should load"),
         }
     }
 
     async fn build_test_config_for_codex_home(codex_home: &Path) -> Config {
         match ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(codex_home.to_path_buf())
             .build()
             .await
@@ -916,7 +927,7 @@ mod tests {
             Ok(config) => config,
             Err(_) => Config::load_default_with_cli_overrides_for_codex_home(
                 codex_home.to_path_buf(),
-                Vec::new(),
+                vec![("model_provider".to_string(), "openai".into())],
             )
             .await
             .expect("default config should load"),
@@ -955,7 +966,7 @@ mod tests {
             required_human_approval: false,
             arg0_paths: Arg0DispatchPaths::default(),
             config,
-            cli_overrides: Vec::new(),
+            cli_overrides: vec![("model_provider".to_string(), "openai".into())],
             loader_overrides: LoaderOverrides::default(),
             strict_config: false,
             cloud_config_bundle: CloudConfigBundleLoader::default(),
@@ -2189,7 +2200,7 @@ mod tests {
             required_human_approval: false,
             arg0_paths: Arg0DispatchPaths::default(),
             config: config.clone(),
-            cli_overrides: Vec::new(),
+            cli_overrides: vec![("model_provider".to_string(), "openai".into())],
             loader_overrides: LoaderOverrides::default(),
             strict_config: false,
             cloud_config_bundle: CloudConfigBundleLoader::default(),

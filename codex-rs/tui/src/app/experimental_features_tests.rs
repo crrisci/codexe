@@ -20,6 +20,7 @@ async fn experimental_features_use_selected_server_profile_and_preserve_task_set
         ..LoaderOverrides::without_managed_config_for_tests()
     };
     let config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(home.path().to_path_buf())
         .loader_overrides(loader.clone())
         .build()
@@ -27,7 +28,7 @@ async fn experimental_features_use_selected_server_profile_and_preserve_task_set
     let client = Box::pin(crate::start_embedded_app_server(
         Default::default(),
         config.clone(),
-        Vec::new(),
+        crate::test_provider_cli_overrides(&config),
         loader,
         /*strict_config*/ false,
         Default::default(),

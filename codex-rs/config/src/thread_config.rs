@@ -321,6 +321,7 @@ mod tests {
             location: None,
             credential_file: None,
             include_internal_metadata: false,
+            ..Default::default()
         }
     }
 }

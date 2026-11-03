@@ -88,6 +88,8 @@ async fn continue_after_stream_error() {
         project_id: None,
         location: None,
         credential_file: None,
+        mmproj: None,
+        image_budget: None,
         include_internal_metadata: false,
     };
 

@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use super::*;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
@@ -101,6 +104,7 @@ base_url = "http://localhost:11434/v1"
         location: None,
         credential_file: None,
         include_internal_metadata: false,
+        ..Default::default()
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -143,6 +147,7 @@ query_params = { api-version = "2025-04-01-preview" }
         location: None,
         credential_file: None,
         include_internal_metadata: false,
+        ..Default::default()
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -189,6 +194,7 @@ supports_standalone_web_search = true
         location: None,
         credential_file: None,
         include_internal_metadata: false,
+        ..Default::default()
     };
 
     let provider: ModelProviderInfo = toml::from_str(azure_provider_toml).unwrap();
@@ -206,6 +212,24 @@ wire_api = "chat"
 
     let err = toml::from_str::<ModelProviderInfo>(provider_toml).unwrap_err();
     assert!(err.to_string().contains(CHAT_WIRE_API_REMOVED_ERROR));
+}
+
+#[test]
+fn test_deserialize_native_xenolith_wire_api() {
+    let provider: ModelProviderInfo = toml::from_str(
+        r#"
+name = "Xenolith"
+base_url = "unix:///tmp/private-wire.sock"
+wire_api = "xenolith"
+requires_openai_auth = false
+supports_websockets = false
+"#,
+    )
+    .unwrap();
+    assert_eq!(provider.wire_api, WireApi::Xenolith);
+    assert_eq!(provider.wire_api.to_string(), "xenolith");
+    assert!(!provider.requires_openai_auth);
+    assert!(!provider.supports_websockets);
 }
 
 #[test]
@@ -384,6 +408,7 @@ fn test_create_amazon_bedrock_provider() {
             location: None,
             credential_file: None,
             include_internal_metadata: false,
+            ..Default::default()
         }
     );
 }

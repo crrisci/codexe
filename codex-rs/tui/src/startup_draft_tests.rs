@@ -28,6 +28,7 @@ where
     I: Iterator<Item = TuiEvent> + Send + 'static,
 {
     let (tx, rx) = unbounded_channel();
+    let (native_startup_tx, native_startup_rx) = unbounded_channel();
     let mut blossom = crate::empty_state_animation::EmptyStateAnimation::default();
     blossom.start_fresh();
     let header = startup_session_header(/*cwd*/ None);
@@ -42,6 +43,9 @@ where
         ),
         events: Box::pin(futures::stream::iter(events)),
         app_event_rx: rx,
+        native_startup_tx,
+        native_startup_rx,
+        native_startup: None,
         initial_screen: StartupDraftInitialScreen::Composer,
         session_action: StartupDraftSessionAction::New,
         resolved_selection: None,
@@ -57,6 +61,64 @@ pub(crate) fn quiet_startup_test_pump() -> StartupDraftPump {
     let mut pump = startup_test_pump(std::iter::empty());
     pump.events = Box::pin(futures::stream::pending());
     pump
+}
+
+#[tokio::test]
+async fn xenolith_native_startup_is_visible_without_enabling_protected_onboarding_or_picker_input()
+{
+    for screen in [
+        StartupDraftInitialScreen::Onboarding,
+        StartupDraftInitialScreen::SessionPicker,
+    ] {
+        let mut pump = quiet_startup_test_pump();
+        pump.initial_screen = screen;
+        pump.native_startup = Some((
+            super::NativeStartupPhase::Starting,
+            tokio::time::Instant::now(),
+        ));
+        assert!(
+            pump.native_startup_line()
+                .unwrap()
+                .contains("Starting Xenolith…")
+        );
+        let mut tui = crate::tui::test_support::make_test_tui().expect("create test terminal");
+        pump.draw(&mut tui, ratatui::layout::Size::new(80, 24))
+            .unwrap();
+        assert!(
+            !tui.terminal.viewport_area.is_empty(),
+            "native loading must paint even on a protected initial screen"
+        );
+        for code in [KeyCode::Char('x'), KeyCode::Enter] {
+            pump.handle_event(&mut tui, TuiEvent::Key(KeyEvent::from(code)))
+                .unwrap();
+        }
+        assert_eq!(pump.initial_screen, screen);
+        assert!(pump.bottom_pane.composer_is_empty());
+        assert!(!pump.submission_pending);
+        pump.clear_native_startup(&mut tui).unwrap();
+        assert!(pump.native_startup.is_none());
+        assert_eq!(pump.initial_screen, screen);
+    }
+}
+
+#[tokio::test]
+async fn xenolith_native_startup_channel_clears_after_readiness_and_operation_completion() {
+    let mut pump = quiet_startup_test_pump();
+    pump.initial_screen = StartupDraftInitialScreen::Onboarding;
+    let sender = pump.native_startup_tx.clone();
+    let mut tui = crate::tui::test_support::make_test_tui().expect("create test terminal");
+    pump.run_until(&mut tui, async move {
+        sender.send(super::NativeStartupPhase::Starting).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        sender.send(super::NativeStartupPhase::Ready).unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    })
+    .await
+    .unwrap();
+    assert!(pump.native_startup.is_none());
+    assert!(pump.native_startup_rx.try_recv().is_err());
+    assert_eq!(pump.initial_screen, StartupDraftInitialScreen::Onboarding);
+    assert!(pump.bottom_pane.composer_is_empty());
 }
 
 pub(crate) fn startup_test_pump_with_input(text: &str) -> StartupDraftPump {

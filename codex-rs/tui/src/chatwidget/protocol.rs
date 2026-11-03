@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use super::*;
 
 impl ChatWidget {
@@ -44,6 +47,11 @@ impl ChatWidget {
             self.restore_retry_status_header_if_present();
         }
         match notification {
+            ServerNotification::XenolithInference(notification) => {
+                if !from_replay {
+                    self.on_native_inference(notification);
+                }
+            }
             ServerNotification::McpServerOauthLoginCompleted(notification) => {
                 if notification.success {
                     self.add_info_message(
@@ -212,6 +220,11 @@ impl ChatWidget {
                 self.on_hook_completed(notification.run);
             }
             ServerNotification::Error(notification) => {
+                self.finish_native_inference(
+                    &notification.thread_id,
+                    &notification.turn_id,
+                    /*success*/ false,
+                );
                 if notification.will_retry {
                     if !from_replay {
                         self.on_stream_error(
@@ -438,6 +451,11 @@ impl ChatWidget {
         notification: TurnCompletedNotification,
         replay_kind: Option<ReplayKind>,
     ) {
+        self.finish_native_inference(
+            &notification.thread_id,
+            &notification.turn.id,
+            replay_kind.is_none() && notification.turn.status == TurnStatus::Completed,
+        );
         // User-message dedupe only suppresses the app-server echo of a prompt
         // this TUI already rendered locally. Once that turn ends, another
         // client can submit the same text and it still needs its own user cell.

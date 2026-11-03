@@ -1,5 +1,8 @@
 //! App-level orchestration tests for the TUI.
 
+#[path = "tests/xenolith_streaming_tests.rs"]
+mod xenolith_streaming_tests;
+
 #[path = "tests/terminal_size_telemetry_tests.rs"]
 mod terminal_size_telemetry_tests;
 
@@ -3933,6 +3936,7 @@ async fn server_only_profile_selection_keeps_turns_on_the_selected_profile() -> 
         "default_permissions = \":workspace\"\n[permissions.server-only]\nextends = \":read-only\"\n",
     )?;
     let server_config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(home.path().into())
         .build()
         .await?;
@@ -9021,7 +9025,7 @@ async fn in_app_resume_uses_configured_or_explicit_cwd() -> Result<()> {
     ] {
         std::fs::write(
             codex_home.join("config.toml"),
-            format!("[tui]\nresume_cwd = \"{configured_mode}\"\n"),
+            format!("model_provider = \"openai\"\n[tui]\nresume_cwd = \"{configured_mode}\"\n"),
         )?;
         for cwd in [
             &launch_cwd,
@@ -9038,6 +9042,7 @@ async fn in_app_resume_uses_configured_or_explicit_cwd() -> Result<()> {
             .map_err(std::io::Error::other)?;
         }
         let config = ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(codex_home.clone())
             .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
             .harness_overrides(ConfigOverrides {
@@ -9203,6 +9208,7 @@ async fn remembered_current_cwd_stays_at_launch_across_in_app_resumes() -> Resul
     )
     .map_err(std::io::Error::other)?;
     let config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(codex_home.clone())
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .harness_overrides(ConfigOverrides {

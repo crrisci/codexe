@@ -30,6 +30,7 @@ use crate::tests::start_test_embedded_app_server;
 
 async fn build_config(temp_dir: &TempDir) -> std::io::Result<Config> {
     ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(temp_dir.path().to_path_buf())
         .build()
         .await

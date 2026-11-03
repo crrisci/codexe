@@ -661,6 +661,8 @@ mod thread_processor_behavior_tests {
             project_id: None,
             location: None,
             credential_file: None,
+            mmproj: None,
+            image_budget: None,
             include_internal_metadata: false,
         };
         let config_manager = ConfigManager::new(

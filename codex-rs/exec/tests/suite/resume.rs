@@ -630,6 +630,7 @@ async fn exec_resume_accepts_global_flags_after_subcommand() -> anyhow::Result<(
     test.cmd()
         .arg("resume")
         .arg("--last")
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--config")
         .arg(base_config)
         .arg("--json")

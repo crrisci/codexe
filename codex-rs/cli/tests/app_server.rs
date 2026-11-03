@@ -15,7 +15,8 @@ fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
         .env_remove("OPENAI_API_KEY")
         .env_remove("OPENAI_FEDERATION_RULE_ID")
         .env_remove("OPENAI_IDENTITY_TOKEN_FILE")
-        .env_remove("OPENAI_WORKLOAD_IDENTITY_CONTEXT");
+        .env_remove("OPENAI_WORKLOAD_IDENTITY_CONTEXT")
+        .args(["-c", "model_provider=\"openai\""]);
     Ok(cmd)
 }
 

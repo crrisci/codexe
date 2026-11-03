@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::num::NonZeroU64;
@@ -172,6 +175,8 @@ fn model_provider_from_proto(
         }
     };
     let info = ModelProviderInfo {
+        mmproj: None,
+        image_budget: None,
         name: provider.name,
         base_url: provider.base_url,
         model_catalog_url: provider.model_catalog_url.map(Into::into),
@@ -240,6 +245,8 @@ fn model_provider_to_proto(
         include_internal_metadata: _,
         credential_file,
         capabilities,
+        mmproj: _,
+        image_budget: _,
     } = provider;
 
     proto::ModelProvider {
@@ -332,6 +339,9 @@ fn proto_string_map(values: HashMap<String, RedactedString>) -> proto::StringMap
 fn proto_wire_api(wire_api: WireApi) -> proto::WireApi {
     match wire_api {
         WireApi::Responses => proto::WireApi::Responses,
+        WireApi::Xenolith => {
+            panic!("local Xenolith provider cannot be serialized as remote Responses")
+        }
     }
 }
 
@@ -632,6 +642,7 @@ mod tests {
             location: None,
             credential_file: None,
             include_internal_metadata: false,
+            ..Default::default()
         }
     }
 

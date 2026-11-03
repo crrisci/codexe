@@ -680,14 +680,16 @@ pub(crate) async fn start_app_server_for_picker(
 pub(crate) async fn start_embedded_app_server_for_picker(
     config: &Config,
 ) -> color_eyre::Result<AppServerSession> {
+    let config = test_responses_config(config);
+    let provider_override = test_provider_cli_overrides(&config);
     let mut target = AppServerTarget::Embedded;
-    let mut state_db = init_state_db_for_app_server_target(config, &target).await?;
+    let mut state_db = init_state_db_for_app_server_target(&config, &target).await?;
     // Keep the shared test fixture's frame independent of embedded startup size.
     let app_server = Box::pin(start_app_server(
         &mut target,
         Arg0DispatchPaths::default(),
         config.clone(),
-        Vec::new(),
+        provider_override,
         LoaderOverrides::without_managed_config_for_tests(),
         /*strict_config*/ false,
         CloudConfigBundleLoader::default(),
@@ -704,6 +706,56 @@ pub(crate) async fn start_embedded_app_server_for_picker(
         target.thread_params_mode(),
     )
     .with_local_codex_home(&config.codex_home))
+}
+
+#[cfg(test)]
+fn test_responses_config(config: &Config) -> Config {
+    let mut config = config.clone();
+    if config.model_provider_id == "xenolith"
+        && config
+            .config_layer_stack
+            .effective_config()
+            .get("model_provider")
+            .is_none()
+    {
+        config.model_provider_id = "openai".to_string();
+        config.model_provider =
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)["openai"]
+                .clone();
+    }
+    config
+}
+
+#[cfg(test)]
+fn test_provider_cli_overrides(config: &Config) -> Vec<(String, toml::Value)> {
+    if config
+        .config_layer_stack
+        .get_active_user_layer()
+        .is_some_and(|layer| {
+            matches!(&layer.name, codex_config::ConfigLayerSource::User { file, profile: None }
+                if file == &config.codex_home.join("config.toml"))
+                && layer
+                    .config
+                    .get("model_provider")
+                    .and_then(toml::Value::as_str)
+                    == Some(config.model_provider_id.as_str())
+        })
+    {
+        return Vec::new();
+    }
+    let mut overrides = vec![(
+        "model_provider".to_string(),
+        config.model_provider_id.clone().into(),
+    )];
+    if !codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+        .contains_key(&config.model_provider_id)
+    {
+        overrides.push((
+            format!("model_providers.{}", config.model_provider_id),
+            toml::Value::try_from(&config.model_provider).expect("serialize fixture provider"),
+        ));
+    }
+    overrides
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2391,8 +2443,7 @@ async fn load_config_or_exit_with_fallback_cwd(
     fallback_cwd: Option<PathBuf>,
     worktree: Option<&ManagedTuiWorktree>,
 ) -> Config {
-    #[allow(clippy::print_stderr)]
-    match load_config_with_worktree_source_policy(
+    match load_config_with_worktree_source_policy_and_native_status(
         cli_kv_overrides,
         overrides,
         loader_overrides,
@@ -2400,6 +2451,7 @@ async fn load_config_or_exit_with_fallback_cwd(
         strict_config,
         fallback_cwd,
         worktree,
+        /*native_status*/ None,
     )
     .await
     {
@@ -2413,6 +2465,81 @@ async fn load_config_or_exit_with_fallback_cwd(
             std::process::exit(1);
         }
     }
+}
+
+#[expect(
+    clippy::print_stderr,
+    reason = "The terminal has been restored before reporting a fatal startup error."
+)]
+async fn load_config_or_exit_with_native_status(
+    cli_kv_overrides: Vec<(String, toml::Value)>,
+    overrides: ConfigOverrides,
+    loader_overrides: LoaderOverrides,
+    cloud_config_bundle: CloudConfigBundleLoader,
+    strict_config: bool,
+    native_status: tokio::sync::mpsc::UnboundedSender<startup_draft::NativeStartupPhase>,
+) -> Config {
+    match load_config_with_worktree_source_policy_and_native_status(
+        cli_kv_overrides,
+        overrides,
+        loader_overrides,
+        cloud_config_bundle,
+        strict_config,
+        /*fallback_cwd*/ None,
+        /*worktree*/ None,
+        Some(native_status),
+    )
+    .await
+    {
+        Ok(config) => config,
+        Err(err) => {
+            restore_terminal_before_fatal_exit();
+            eprintln!("Error loading configuration: {err}");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn load_config_with_worktree_source_policy_and_native_status(
+    cli_kv_overrides: Vec<(String, toml::Value)>,
+    overrides: ConfigOverrides,
+    loader_overrides: LoaderOverrides,
+    cloud_config_bundle: CloudConfigBundleLoader,
+    strict_config: bool,
+    fallback_cwd: Option<PathBuf>,
+    worktree: Option<&ManagedTuiWorktree>,
+    native_status: Option<tokio::sync::mpsc::UnboundedSender<startup_draft::NativeStartupPhase>>,
+) -> std::io::Result<Config> {
+    let config = load_config_with_worktree_source_policy(
+        cli_kv_overrides,
+        overrides,
+        loader_overrides,
+        cloud_config_bundle,
+        strict_config,
+        fallback_cwd,
+        worktree,
+    )
+    .await?;
+    #[cfg(unix)]
+    let config = if let Some(sender) = native_status {
+        crate::legacy_core::xenolith::configure_with_status(config, move |phase| {
+            use crate::legacy_core::xenolith::ServicePhase;
+            let phase = match phase {
+                ServicePhase::Connecting => startup_draft::NativeStartupPhase::Connecting,
+                ServicePhase::Starting => startup_draft::NativeStartupPhase::Starting,
+                ServicePhase::Waiting => startup_draft::NativeStartupPhase::Waiting,
+                ServicePhase::Ready => startup_draft::NativeStartupPhase::Ready,
+            };
+            let _ = sender.send(phase);
+        })
+        .await?
+    } else {
+        crate::legacy_core::xenolith::configure(config).await?
+    };
+    #[cfg(not(unix))]
+    let _ = native_status;
+    Ok(config)
 }
 
 #[allow(clippy::too_many_arguments)]

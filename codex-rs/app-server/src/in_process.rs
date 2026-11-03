@@ -453,6 +453,10 @@ async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcess
         args.enable_codex_api_key_env,
     )
     .await?;
+    #[cfg(unix)]
+    {
+        args.config = Arc::new(codex_core::xenolith::configure((*args.config).clone()).await?);
+    }
     let channel_capacity = args.channel_capacity.max(1);
     let installation_id = resolve_installation_id(&args.config.codex_home).await?;
     let (client_tx, mut client_rx) = mpsc::channel::<InProcessClientMessage>(channel_capacity);
@@ -884,6 +888,7 @@ mod tests {
 
     async fn build_test_config(codex_home: &Path) -> Config {
         match ConfigBuilder::default()
+            .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
             .codex_home(codex_home.to_path_buf())
             .build()
             .await
@@ -891,7 +896,7 @@ mod tests {
             Ok(config) => config,
             Err(_) => Config::load_default_with_cli_overrides_for_codex_home(
                 codex_home.to_path_buf(),
-                Vec::new(),
+                vec![("model_provider".to_string(), "openai".into())],
             )
             .await
             .expect("default config should load"),
@@ -911,7 +916,7 @@ mod tests {
         let args = InProcessStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
             config,
-            cli_overrides: Vec::new(),
+            cli_overrides: vec![("model_provider".to_string(), "openai".into())],
             loader_overrides: LoaderOverrides::default(),
             strict_config: false,
             cloud_config_bundle: CloudConfigBundleLoader::default(),

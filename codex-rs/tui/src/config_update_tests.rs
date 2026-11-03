@@ -55,6 +55,7 @@ async fn remote_project_trust_guards_thread_start_and_preserves_repository_decis
         "model_reasoning_effort = \"high\"\n",
     )?;
     let config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(codex_home.clone())
         .harness_overrides(ConfigOverrides {
             cwd: Some(codex_home.clone()),

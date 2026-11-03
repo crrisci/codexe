@@ -145,6 +145,7 @@ fn exec_without_prompt_argument_rejects_empty_piped_stdin() {
 
     // printf "" | codex exec --skip-git-repo-check -C <cwd>
     test.cmd()
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("-C")
         .arg(test.cwd_path())
@@ -160,6 +161,7 @@ fn exec_dash_prompt_rejects_empty_piped_stdin() {
 
     // printf "" | codex exec --skip-git-repo-check -C <cwd> -
     test.cmd()
+        .args(["-c", "model_provider=\"openai\""])
         .arg("--skip-git-repo-check")
         .arg("-C")
         .arg(test.cwd_path())

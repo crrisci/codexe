@@ -1790,6 +1790,8 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
         project_id: None,
         location: None,
         credential_file: None,
+        mmproj: None,
+        image_budget: None,
         include_internal_metadata: false,
     };
 
@@ -3304,6 +3306,8 @@ async fn azure_responses_request_does_not_store_and_preserves_prefixed_item_ids(
         project_id: None,
         location: None,
         credential_file: None,
+        mmproj: None,
+        image_budget: None,
         include_internal_metadata: false,
     };
 
@@ -4155,6 +4159,8 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
         project_id: None,
         location: None,
         credential_file: None,
+        mmproj: None,
+        image_budget: None,
         include_internal_metadata: false,
     };
 
@@ -4246,6 +4252,8 @@ async fn env_var_overrides_loaded_auth() {
         project_id: None,
         location: None,
         credential_file: None,
+        mmproj: None,
+        image_budget: None,
         include_internal_metadata: false,
     };
 

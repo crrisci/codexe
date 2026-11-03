@@ -54,6 +54,7 @@ async fn stdio_sigterm_times_out_with_blocked_stderr() -> Result<()> {
     let codex_home = TempDir::new()?;
     let mut process = tokio::process::Command::new(cargo_bin("codex-app-server")?)
         .arg(DISABLE_PLUGIN_STARTUP_TASKS_ARG)
+        .args(["-c", "model_provider=\"openai\""])
         .env("CODEX_HOME", codex_home.path())
         .env(
             "CODEX_APP_SERVER_MANAGED_CONFIG_PATH",

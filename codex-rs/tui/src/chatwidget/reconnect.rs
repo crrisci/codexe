@@ -25,6 +25,7 @@ impl ChatWidget {
     }
 
     fn pause_for_disconnect_inner(&mut self, preserve_startup_input: bool) {
+        self.clear_native_inference();
         self.permission_discovery = None;
         self.invalidate_permission_discovery();
         if !preserve_startup_input {

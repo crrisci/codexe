@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 #[cfg(test)]
 use std::path::Path;
 use std::path::PathBuf;
@@ -2101,6 +2104,7 @@ server_notification_definitions! {
     ModelVerification => "model/verification" (v2::ModelVerificationNotification),
     AuthRecoveryStarted => "modelProvider/authRecoveryStarted" (v2::AuthRecoveryNotification),
     AuthRecoveryCompleted => "modelProvider/authRecoveryCompleted" (v2::AuthRecoveryNotification),
+    XenolithInference => "xenolith/inference" (v2::XenolithInferenceNotification),
     #[experimental("turn/moderationMetadata")]
     TurnModerationMetadata => "turn/moderationMetadata" (v2::TurnModerationMetadataNotification),
     ModelSafetyBufferingUpdated => "model/safetyBuffering/updated" (v2::ModelSafetyBufferingUpdatedNotification),
@@ -4616,6 +4620,21 @@ mod tests {
         assert_eq!(
             crate::experimental_api::ExperimentalApi::experimental_reason(&notification),
             Some("thread/settings/updated")
+        );
+    }
+
+    #[test]
+    fn xenolith_inference_notification_is_available_without_experimental_api() {
+        let notification =
+            ServerNotification::XenolithInference(v2::XenolithInferenceNotification {
+                thread_id: "thr_123".to_string(),
+                turn_id: "turn_123".to_string(),
+                phase: "prefill".to_string(),
+                details: "loading prompt".to_string(),
+            });
+        assert_eq!(
+            crate::experimental_api::ExperimentalApi::experimental_reason(&notification),
+            None
         );
     }
 

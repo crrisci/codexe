@@ -31,7 +31,7 @@ async fn check_fork_dispatch(mode: ThreadParamsMode) -> Result<()> {
         std::fs::write(
             home.path().join("config.toml"),
             format!(
-                "sandbox_mode = \"workspace-write\"\n[sandbox_workspace_write]\nwritable_roots = [{root}]\n"
+                "model_provider = \"openai\"\nsandbox_mode = \"workspace-write\"\n[sandbox_workspace_write]\nwritable_roots = [{root}]\n"
             ),
         )?;
     }

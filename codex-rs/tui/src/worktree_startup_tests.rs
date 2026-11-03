@@ -98,6 +98,7 @@ async fn refreshed_bundle_rechecks_source_during_config_reload() -> anyhow::Resu
         recovery,
     };
     let overrides = ConfigOverrides {
+        model_provider: Some("openai".to_string()),
         cwd: Some(destination),
         ..Default::default()
     };

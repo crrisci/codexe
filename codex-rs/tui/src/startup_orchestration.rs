@@ -508,13 +508,15 @@ pub(super) async fn run_main_inner(
         ..Default::default()
     };
 
+    let native_status = startup_draft.native_startup_sender();
     let mut config = startup_draft
-        .run_until(load_config_or_exit(
+        .run_until(load_config_or_exit_with_native_status(
             cli_kv_overrides.clone(),
             overrides.clone(),
             loader_overrides.clone(),
             cloud_config_bundle.clone(),
             strict_config,
+            native_status,
         ))
         .await?;
     if app_server_target.uses_embedded_network_policy() {
@@ -567,8 +569,17 @@ pub(super) async fn run_main_inner(
     } else {
         None
     };
+    let native_embedded = daemon_startup::native_requires_embedded(
+        config.model_provider.wire_api,
+        cli.agents_overview,
+        &app_server_target,
+    );
+    if native_embedded {
+        app_server_target = AppServerTarget::Embedded;
+    }
     let auto_start_daemon = cfg!(any(unix, windows))
         && implicit_connection
+        && !native_embedded
         && !cli.no_daemon
         && !app_server_target.uses_remote_workspace();
     if auto_start_daemon

@@ -235,6 +235,53 @@ async fn load_config_normalizes_relative_cwd_override() -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn native_xenolith_is_default_without_an_explicit_provider_or_model() -> std::io::Result<()> {
+    let codex_home = tempdir()?;
+    let config = Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        ConfigOverrides::default(),
+        codex_home.abs(),
+    )
+    .await?;
+    assert_eq!(
+        config.model_provider_id,
+        codex_model_provider_info::XENOLITH_PROVIDER_ID
+    );
+    assert_eq!(config.model_provider.wire_api, WireApi::Xenolith);
+    assert!(
+        config.model.is_none(),
+        "the served model is discovered at inference startup"
+    );
+    assert!(config.model_provider.base_url.is_none());
+    assert!(!config.model_provider.requires_openai_auth);
+    Ok(())
+}
+
+#[tokio::test]
+async fn xenolith_default_preserves_explicit_bedrock_wizard_and_providers() -> std::io::Result<()> {
+    let codex_home = tempdir()?;
+    for (provider, expected) in [
+        (None, "openai"),
+        (Some("xenolith"), "xenolith"),
+        (Some("openai"), "openai"),
+    ] {
+        let mut source = "[features]\nbedrock_setup_wizard = true\n".to_string();
+        if let Some(provider) = provider {
+            source = format!("model_provider = {provider:?}\n{source}");
+        }
+        let config = Config::load_from_base_config_with_overrides(
+            toml::from_str(&source).expect("wizard fixture"),
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await?;
+        assert_eq!(config.model_provider_id, expected);
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn load_config_applies_optional_mcp_startup_grace() -> std::io::Result<()> {
     let codex_home = tempdir()?;
@@ -7238,6 +7285,7 @@ async fn responses_websocket_features_do_not_change_wire_api() -> std::io::Resul
         let mut entries = BTreeMap::new();
         entries.insert(feature_key.to_string(), true);
         let cfg = ConfigToml {
+            model_provider: Some("openai".to_string()),
             features: Some(FeaturesToml::from(entries)),
             ..Default::default()
         };

@@ -15,6 +15,7 @@ async fn test_server(
 ) -> color_eyre::Result<(TempDir, AppServerSession, String, String)> {
     let codex_home = tempfile::tempdir()?;
     let config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(codex_home.path().to_path_buf())
         .build()
         .await?;

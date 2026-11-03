@@ -2758,6 +2758,8 @@ fn websocket_provider_with_connect_timeout(
         project_id: None,
         location: None,
         credential_file: None,
+        mmproj: None,
+        image_budget: None,
         include_internal_metadata: false,
     }
 }

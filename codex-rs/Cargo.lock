@@ -3037,6 +3037,7 @@ dependencies = [
  "codex-web-search-extension",
  "codex-windows-sandbox",
  "codex-windows-sandbox-test-support",
+ "codex-xenolith-wire",
  "core_test_support",
  "ctor 0.6.3",
  "dirs",
@@ -5701,6 +5702,16 @@ dependencies = [
  "serde_json",
  "tempfile",
  "uuid",
+]
+
+[[package]]
+name = "codex-xenolith-wire"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "libc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

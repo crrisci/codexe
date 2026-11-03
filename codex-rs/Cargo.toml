@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "xenolith-wire",
     "aws-auth",
     "analytics",
     "agent-graph-store",

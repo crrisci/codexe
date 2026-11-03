@@ -315,12 +315,12 @@ requires_openai_auth = false
         std::fs::write(
             server_home.path().join("config.toml"),
             match choice {
-                "managed" => "",
+                "managed" => "model_provider = \"openai\"\n",
                 "kv_reviewer" => {
-                    "model = \"server-model\"\napproval_policy = { granular = { sandbox_approval = false, rules = false, request_permissions = true, mcp_elicitations = false } }\n"
+                    "model_provider = \"openai\"\nmodel = \"server-model\"\napproval_policy = { granular = { sandbox_approval = false, rules = false, request_permissions = true, mcp_elicitations = false } }\n"
                 }
                 _ => {
-                    "model = \"server-model\"\nmodel_reasoning_effort = \"high\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\n"
+                    "model_provider = \"openai\"\nmodel = \"server-model\"\nmodel_reasoning_effort = \"high\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\n"
                 }
             },
         )?;

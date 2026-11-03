@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use std::borrow::Cow;
 
 use crate::RolloutItem;
@@ -179,6 +182,7 @@ fn persisted_event_msg(
         | EventMsg::RealtimeConversationSdp(_)
         | EventMsg::RealtimeConversationRealtime(_)
         | EventMsg::RealtimeConversationClosed(_)
+        | EventMsg::XenolithInference(_)
         | EventMsg::SafetyBuffering(_)
         | EventMsg::ModelReroute(_)
         | EventMsg::ModelVerification(_)

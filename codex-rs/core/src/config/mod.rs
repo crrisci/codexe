@@ -93,6 +93,7 @@ use codex_mcp::ResolvedMcpCatalog;
 use codex_model_provider::ChatgptBaseUrl;
 use codex_model_provider::DEFAULT_CHATGPT_BASE_URL;
 use codex_model_provider::ProviderCapabilities;
+use codex_model_provider_info::DEFAULT_MODEL_PROVIDER_ID;
 use codex_model_provider_info::GCP_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
@@ -318,6 +319,7 @@ pub(crate) async fn test_config() -> Config {
     Config::load_from_base_config_with_overrides(
         ConfigToml {
             model: Some("gpt-5.5".to_string()),
+            model_provider: Some("openai".to_string()),
             ..Default::default()
         },
         ConfigOverrides::default(),
@@ -4063,10 +4065,23 @@ impl Config {
             apply_default_gcp_auth(provider, &resolved_cwd);
         }
 
+        // A newly default-enabled upstream wizard must not select a cloud provider
+        // for an otherwise unconfigured CodeXe installation.
+        let explicit_bedrock_wizard = cfg.features.as_ref().is_some_and(|configured| {
+            configured.entries().get(Feature::BedrockSetupWizard.key()) == Some(&true)
+        });
         let model_provider_id = config_layer_stack.required_model_provider().map(str::to_string)
             .or(model_provider)
             .or(cfg.model_provider)
-            .unwrap_or_else(|| "openai".to_string());
+            .unwrap_or_else(|| {
+                // The explicitly enabled Bedrock wizard starts from unauthenticated
+                // OpenAI onboarding before it configures the Bedrock provider.
+                if explicit_bedrock_wizard && features.enabled(Feature::BedrockSetupWizard) {
+                    "openai".to_owned()
+                } else {
+                    DEFAULT_MODEL_PROVIDER_ID.to_owned()
+                }
+            });
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {

@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use super::shared::v2_enum_from_core;
 use super::turn::CyberAccessProgram;
 use crate::JsonSchema;
@@ -221,4 +224,14 @@ pub struct ModelSafetyBufferingUpdatedNotification {
     pub reasons: Vec<String>,
     pub show_buffering_ui: bool,
     pub faster_model: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct XenolithInferenceNotification {
+    pub thread_id: String,
+    pub turn_id: String,
+    pub phase: String,
+    pub details: String,
 }

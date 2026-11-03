@@ -46,6 +46,7 @@ pub(in crate::analytics) async fn live(
 ) -> (tempfile::TempDir, Live) {
     let home = tempfile::tempdir().unwrap();
     let mut config = ConfigBuilder::default()
+        .cli_overrides(vec![("model_provider".to_string(), "openai".into())])
         .codex_home(home.path().to_path_buf())
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .build()

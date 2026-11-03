@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use crate::error::ApiError;
 use codex_protocol::ResponseUsageMetadata;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
@@ -79,6 +82,8 @@ pub struct ResponseId(pub String);
 
 #[derive(Debug)]
 pub enum ResponseEvent {
+    /// Native local inference telemetry; never assistant output.
+    XenolithInference(serde_json::Value),
     Created {
         /// Existing server response ID, when supplied by the stream.
         response_id: Option<String>,

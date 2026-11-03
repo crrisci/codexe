@@ -16,7 +16,7 @@ async fn cloud_list_only_allows_trusted_credential_destinations() -> Result<()> 
     let codex_home = TempDir::new()?;
     std::fs::write(
         codex_home.path().join("config.toml"),
-        "cli_auth_credentials_store = 'file'\n",
+        "model_provider = 'openai'\ncli_auth_credentials_store = 'file'\n",
     )?;
     std::fs::write(
         codex_home.path().join("auth.json"),

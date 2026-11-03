@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use crate::context::UserGoalUpdate;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -859,8 +862,25 @@ async fn drain_to_completed(
             ));
         };
         match event {
-            // Keep each attempt isolated until the response completes successfully.
-            Ok(ResponseEvent::OutputItemDone(item)) => output.push(item),
+            Ok(ResponseEvent::XenolithInference(value)) => {
+                #[cfg(unix)]
+                {
+                    let (phase, details) = codex_xenolith_wire::backend::presentation(&value);
+                    sess.send_event(
+                        turn_context,
+                        EventMsg::XenolithInference(
+                            codex_protocol::protocol::XenolithInferenceEvent { phase, details },
+                        ),
+                    )
+                    .await;
+                }
+                #[cfg(not(unix))]
+                let _ = value;
+            }
+            Ok(ResponseEvent::OutputItemDone(item)) => {
+                // Keep each attempt isolated until the response completes successfully.
+                output.push(item);
+            }
             Ok(ResponseEvent::ServerReasoningIncluded(included)) => {
                 includes_reasoning = included;
             }

@@ -183,10 +183,15 @@ async fn daemon_startup(command: &str) -> Result<()> {
         "failed to prepare CLI test executable"
     );
     let bedrock_onboarding = matches!(command, "bedrock" | "bedrock-running");
+    let fixture_provider = if bedrock_onboarding {
+        ""
+    } else {
+        "model_provider = \"openai\"\n"
+    };
     fs::write(
         home.path().join("config.toml"),
         format!(
-            "model = \"gpt-5.6-terra\"\n\
+            "{fixture_provider}model = \"gpt-5.6-terra\"\n\
          cli_auth_credentials_store = \"file\"\n\
          suppress_unstable_features_warning = true\nanalytics.enabled = false\n\
          windows.sandbox = \"unelevated\"\n\

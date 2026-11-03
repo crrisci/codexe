@@ -3167,8 +3167,18 @@
           "description": "Additional HTTP headers to include in requests to this provider where the (key, value) pairs are the header name and value.",
           "type": "object"
         },
+        "image_budget": {
+          "description": "Xenolith only: visual token budget, validated against service capabilities.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
         "location": {
           "description": "Google Cloud location for the built-in GCP provider. Takes precedence over `GOOGLE_CLOUD_LOCATION`; defaults to `global` when neither is set.",
+          "type": "string"
+        },
+        "mmproj": {
+          "description": "Xenolith only: absolute projector path used when starting the local engine.",
           "type": "string"
         },
         "model_catalog_url": {
@@ -7427,6 +7437,13 @@
           "description": "The Responses API exposed by OpenAI at `/v1/responses`.",
           "enum": [
             "responses"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Local Xenolith wire v1/v2 over a Unix socket, without an HTTP bridge.",
+          "enum": [
+            "xenolith"
           ],
           "type": "string"
         }

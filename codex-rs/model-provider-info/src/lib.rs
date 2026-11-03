@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 //! Registry of model providers supported by Codex.
 //!
 //! Providers can be defined in two places:
@@ -37,12 +40,15 @@ use std::time::Duration;
 mod capabilities;
 mod gateway_oauth;
 mod oauth_session;
+mod xenolith;
 pub use capabilities::ModelProviderCapabilities;
 pub use capabilities::RemoteCompactionSupport;
 pub use gateway_oauth::GatewayOAuthConfig;
 pub use gateway_oauth::GatewayOAuthDelivery;
 pub use oauth_session::OAuthCredentialsStore;
 pub use oauth_session::OAuthSessionConfig;
+pub use xenolith::DEFAULT_MODEL_PROVIDER_ID;
+pub use xenolith::XENOLITH_PROVIDER_ID;
 
 pub const RESIDENCY_HEADER_NAME: &str = "x-openai-internal-codex-residency";
 
@@ -117,12 +123,15 @@ pub enum WireApi {
     /// The Responses API exposed by OpenAI at `/v1/responses`.
     #[default]
     Responses,
+    /// Local Xenolith wire v1/v2 over a Unix socket, without an HTTP bridge.
+    Xenolith,
 }
 
 impl fmt::Display for WireApi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = match self {
             Self::Responses => "responses",
+            Self::Xenolith => "xenolith",
         };
         f.write_str(value)
     }
@@ -136,8 +145,12 @@ impl<'de> Deserialize<'de> for WireApi {
         let value = String::deserialize(deserializer)?;
         match value.as_str() {
             "responses" => Ok(Self::Responses),
+            "xenolith" => Ok(Self::Xenolith),
             "chat" => Err(serde::de::Error::custom(CHAT_WIRE_API_REMOVED_ERROR)),
-            _ => Err(serde::de::Error::unknown_variant(&value, &["responses"])),
+            _ => Err(serde::de::Error::unknown_variant(
+                &value,
+                &["responses", "xenolith"],
+            )),
         }
     }
 }
@@ -151,6 +164,10 @@ pub struct ModelProviderInfo {
     pub name: String,
     /// Base URL for the provider's OpenAI-compatible API.
     pub base_url: Option<String>,
+    /// Xenolith only: absolute projector path used when starting the local engine.
+    pub mmproj: Option<std::path::PathBuf>,
+    /// Xenolith only: visual token budget, validated against service capabilities.
+    pub image_budget: Option<u32>,
     /// Optional full URL for a Codex-native model catalog. When unset, OpenAI discovery
     /// uses the Codex backend unless `base_url` overrides the inference endpoint.
     /// The endpoint must serve the Codex catalog format, not the public `/v1/models` API.
@@ -568,6 +585,8 @@ other non-default provider fields are not supported"
     pub fn create_openai_provider(base_url: Option<String>) -> ModelProviderInfo {
         ModelProviderInfo {
             name: OPENAI_PROVIDER_NAME.into(),
+            mmproj: None,
+            image_budget: None,
             base_url,
             model_catalog_url: None,
             env_key: None,
@@ -618,6 +637,8 @@ other non-default provider fields are not supported"
     ) -> ModelProviderInfo {
         ModelProviderInfo {
             name: AMAZON_BEDROCK_PROVIDER_NAME.into(),
+            mmproj: None,
+            image_budget: None,
             // The runtime provider derives the regional Mantle endpoint when
             // this is unset. A configured value is therefore unambiguously an
             // endpoint override.
@@ -667,6 +688,8 @@ other non-default provider fields are not supported"
     pub fn create_gcp_provider() -> ModelProviderInfo {
         ModelProviderInfo {
             name: GCP_PROVIDER_NAME.into(),
+            mmproj: None,
+            image_budget: None,
             base_url: None,
             model_catalog_url: None,
             env_key: None,
@@ -761,9 +784,8 @@ pub fn built_in_model_providers(
         P::create_amazon_bedrock_runtime_provider(/*aws*/ None);
     let gcp_provider = P::create_gcp_provider();
 
-    // Bundle OpenAI, supported cloud-hosted OpenAI backends, and local OSS providers.
-    // Other compatible providers can be added through `model_providers` in config.toml.
-    [
+    // Keep the upstream provider catalog and add Xenolith as the local native provider.
+    let mut providers = [
         (OPENAI_PROVIDER_ID, openai_provider),
         (AMAZON_BEDROCK_PROVIDER_ID, amazon_bedrock_provider),
         (GCP_PROVIDER_ID, gcp_provider),
@@ -782,7 +804,9 @@ pub fn built_in_model_providers(
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
-    .collect()
+    .collect::<HashMap<_, _>>();
+    providers.insert(XENOLITH_PROVIDER_ID.to_owned(), xenolith::provider());
+    providers
 }
 
 /// Merge configured providers into the built-in provider catalog.
@@ -816,6 +840,8 @@ pub fn merge_configured_model_providers(
                 }
                 built_in_provider.model_catalog_url = Some(catalog_url);
             }
+        } else if key == XENOLITH_PROVIDER_ID {
+            model_providers.insert(key, xenolith::merge_override(provider));
         } else if matches!(
             key.as_str(),
             AMAZON_BEDROCK_PROVIDER_ID | AMAZON_BEDROCK_RUNTIME_PROVIDER_ID
@@ -914,6 +940,8 @@ pub fn create_oss_provider(default_provider_port: u16, wire_api: WireApi) -> Mod
 pub fn create_oss_provider_with_base_url(base_url: &str, wire_api: WireApi) -> ModelProviderInfo {
     ModelProviderInfo {
         name: "gpt-oss".into(),
+        mmproj: None,
+        image_budget: None,
         base_url: Some(base_url.into()),
         model_catalog_url: None,
         env_key: None,

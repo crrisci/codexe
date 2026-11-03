@@ -1,3 +1,6 @@
+# Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+# Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 [package]
 edition.workspace = true
 license.workspace = true
@@ -141,6 +144,9 @@ openssl-sys = { workspace = true, features = ["vendored"] }
 # Build OpenSSL from source for musl builds.
 [target.aarch64-unknown-linux-musl.dependencies]
 openssl-sys = { workspace = true, features = ["vendored"] }
+
+[target.'cfg(unix)'.dependencies]
+codex-xenolith-wire = { path = "../xenolith-wire" }
 
 [dev-dependencies]
 codex-message-board = { workspace = true }

@@ -210,14 +210,21 @@ pub async fn load_default_config_for_test_with_cloud_config_bundle(
     codex_home: &TempDir,
     cloud_config_bundle: CloudConfigBundleLoader,
 ) -> Config {
-    ConfigBuilder::default()
+    let mut config = ConfigBuilder::default()
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .codex_home(codex_home.path().to_path_buf())
         .harness_overrides(default_test_overrides())
         .cloud_config_bundle(cloud_config_bundle)
         .build()
         .await
-        .expect("defaults for test should always succeed")
+        .expect("defaults for test should always succeed");
+    // Use the Responses fixture only for the implicit native default. Preserve
+    // providers selected by user configuration or managed requirements.
+    if config.model_provider_id == "xenolith" {
+        config.model_provider_id = "openai".to_string();
+        config.model_provider = config.model_providers["openai"].clone();
+    }
+    config
 }
 
 pub fn managed_network_requirements_loader() -> CloudConfigBundleLoader {

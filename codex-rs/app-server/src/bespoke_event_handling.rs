@@ -1,3 +1,6 @@
+// Xenolith native integration: added or modified by Francesco Pio Crisci, 2026.
+// Licensed under Apache-2.0; upstream copyright and notices are retained.
+
 use crate::notification_media::without_notification_media;
 use crate::outgoing_message::ClientRequestResult;
 use crate::outgoing_message::ThreadScopedOutgoingMessageSender;
@@ -427,6 +430,18 @@ pub(crate) async fn apply_bespoke_event_handling(
             };
             outgoing
                 .send_server_notification(ServerNotification::TurnModerationMetadata(notification))
+                .await;
+        }
+        EventMsg::XenolithInference(event) => {
+            outgoing
+                .send_server_notification(ServerNotification::XenolithInference(
+                    codex_app_server_protocol::XenolithInferenceNotification {
+                        thread_id: conversation_id.to_string(),
+                        turn_id: event_turn_id.clone(),
+                        phase: event.phase,
+                        details: event.details,
+                    },
+                ))
                 .await;
         }
         EventMsg::SafetyBuffering(event) => {
