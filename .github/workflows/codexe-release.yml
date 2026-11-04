@@ -1,0 +1,229 @@
+# Build and optionally publish a CodeXe release from a manual dispatch.
+name: CodeXe release
+on:
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: Version for the CodeXe package and release tag
+        required: true
+        type: string
+      publish:
+        description: Promote a previously built and explicitly approved candidate
+        required: true
+        default: false
+        type: boolean
+      candidate_run_id:
+        description: Successful build workflow run ID containing the candidate artifact (required when publishing)
+        required: false
+        type: string
+      approved_archive_sha256:
+        description: Explicitly reviewed SHA-256 of the candidate archive (required when publishing)
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: codexe-release-${{ inputs.package_version }}
+  cancel-in-progress: false
+jobs:
+  build-linux-gnu:
+    name: Build Linux GNU package
+    if: ${{ !inputs.publish }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CODEX_REPO_ROOT: ${{ github.workspace }}
+      PACKAGE_VERSION: "${{ inputs.package_version }}"
+      STABLE_GIT_COMMIT: ${{ github.sha }}
+      CARGO_INCREMENTAL: "0"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+      - name: Install Linux package build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev libcap-dev libasound2-dev bubblewrap
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - name: Validate and derive the candidate workspace version
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_codexe_release.py "${PACKAGE_VERSION}"
+      - name: Refresh the ephemeral workspace lockfile
+        run: (cd codex-rs && cargo update --workspace)
+      - name: Build canonical CodeXe package
+        run: |
+          set -euo pipefail
+          python3 scripts/build_codex_package.py \
+            --target x86_64-unknown-linux-gnu \
+            --cargo-profile release \
+            --strip \
+            --package-version "${PACKAGE_VERSION}" \
+            --package-dir "${GITHUB_WORKSPACE}/dist/codexe-candidate" \
+            --archive-output "${GITHUB_WORKSPACE}/dist/codexe-v${PACKAGE_VERSION}-linux-x86_64-unknown-linux-gnu.tar.gz"
+      - name: Record final workspace lockfile provenance
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["CODEX_REPO_ROOT"])
+          provenance_path = root / "dist" / "codexe-release-provenance.json"
+          provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+          provenance["cargoLockSha256"] = hashlib.sha256(
+              (root / "codex-rs" / "Cargo.lock").read_bytes()
+          ).hexdigest()
+          provenance_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+          PY
+      - name: Verify CLI and package versions
+        run: |
+          set -euo pipefail
+          package_dir="${GITHUB_WORKSPACE}/dist/codexe-candidate"
+          cli_version="$("${package_dir}/bin/codex" --version)"
+          [[ "${cli_version}" == "codex-cli ${PACKAGE_VERSION}" ]] || {
+            echo "CLI version mismatch: ${cli_version}" >&2
+            exit 1
+          }
+          python3 - "${package_dir}/codex-package.json" "${PACKAGE_VERSION}" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          metadata = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if metadata.get("version") != sys.argv[2]:
+              raise SystemExit(f"package version mismatch: {metadata.get('version')!r}")
+          PY
+      - name: Verify offline local installation
+        run: |
+          set -euo pipefail
+          package_dir="${GITHUB_WORKSPACE}/dist/codexe-candidate"
+          install_home="${RUNNER_TEMP}/codexe-candidate-home"
+          install_prefix="${RUNNER_TEMP}/codexe-candidate-prefix"
+          install_bin="${RUNNER_TEMP}/codexe-candidate-bin"
+          archive="${GITHUB_WORKSPACE}/dist/codexe-v${PACKAGE_VERSION}-linux-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir -p "${install_home}"
+          HOME="${install_home}" \
+            CODEX_HOME="${install_home}/.codexe" \
+            CODEX_NON_INTERACTIVE=true \
+            sh "${package_dir}/install/install.sh" \
+              --codexe \
+              --package-archive "${archive}" \
+              --prefix "${install_prefix}" \
+              --bin-dir "${install_bin}"
+          installed_version="$(HOME="${install_home}" CODEX_HOME="${install_home}/.codexe" "${install_bin}/codexe" --version)"
+          [[ "${installed_version}" == "codex-cli ${PACKAGE_VERSION}" ]] || {
+            echo "Installed CLI version mismatch: ${installed_version}" >&2
+            exit 1
+          }
+      - name: Checksum release archive
+        run: |
+          set -euo pipefail
+          archive="${GITHUB_WORKSPACE}/dist/codexe-v${PACKAGE_VERSION}-linux-x86_64-unknown-linux-gnu.tar.gz"
+          test -f "${archive}"
+          (cd "${GITHUB_WORKSPACE}/dist" && sha256sum "$(basename "${archive}")" > SHA256SUMS)
+      - name: Upload release review artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: codexe-release-x86_64-unknown-linux-gnu
+          path: |
+            dist/codexe-v*-linux-x86_64-unknown-linux-gnu.tar.gz
+            dist/SHA256SUMS
+            dist/codexe-release-provenance.json
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    if: ${{ inputs.publish && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+    environment: release
+    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    env:
+      PACKAGE_VERSION: "${{ inputs.package_version }}"
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      APPROVED_ARCHIVE_SHA256: ${{ inputs.approved_archive_sha256 }}
+      EXPECTED_REPOSITORY: ${{ github.repository }}
+      EXPECTED_SHA: ${{ github.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate promotion inputs
+        run: |
+          python3 .github/scripts/verify_codexe_candidate.py validate-inputs \
+            --package-version "${PACKAGE_VERSION}" \
+            --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --approved-archive-sha256 "${APPROVED_ARCHIVE_SHA256}"
+      - name: Read candidate workflow run metadata
+        env:
+          RUN_METADATA_PATH: ${{ runner.temp }}/codexe-candidate-run.json
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}" > "${RUN_METADATA_PATH}"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: codexe-release-x86_64-unknown-linux-gnu
+          path: dist
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify candidate run, provenance, archive and approved digest
+        env:
+          RUN_METADATA_PATH: ${{ runner.temp }}/codexe-candidate-run.json
+          PROVENANCE_PATH: ${{ github.workspace }}/dist/codexe-release-provenance.json
+          ARCHIVE_PATH: ${{ github.workspace }}/dist/codexe-v${{ inputs.package_version }}-linux-x86_64-unknown-linux-gnu.tar.gz
+          CHECKSUMS_PATH: ${{ github.workspace }}/dist/SHA256SUMS
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/verify_codexe_candidate.py verify-candidate \
+            --run-metadata "${RUN_METADATA_PATH}" \
+            --provenance "${PROVENANCE_PATH}" \
+            --archive "${ARCHIVE_PATH}" \
+            --checksums "${CHECKSUMS_PATH}" \
+            --expected-repository "${EXPECTED_REPOSITORY}" \
+            --expected-sha "${EXPECTED_SHA}" \
+            --expected-run-id "${CANDIDATE_RUN_ID}" \
+            --package-version "${PACKAGE_VERSION}" \
+            --approved-archive-sha256 "${APPROVED_ARCHIVE_SHA256}"
+      - name: Reject an existing release tag
+        run: |
+          set -euo pipefail
+          tag="codexe-v${PACKAGE_VERSION}"
+          refs="$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${tag}")"
+          if [[ "$(jq --arg ref "refs/tags/${tag}" 'any(.[]; .ref == $ref)' <<<"${refs}")" == true ]]; then
+            echo "Tag ${tag} already exists; refusing to publish over it" >&2
+            exit 1
+          fi
+      - name: Create draft, attach the candidate files, then publish
+        run: |
+          set -euo pipefail
+          tag="codexe-v${PACKAGE_VERSION}"
+          # Drafts permit attaching assets when immutable releases are enabled.
+          # Any failed upload leaves an unpublished draft for investigation.
+          release_flags=(--latest=false)
+          version_core="${PACKAGE_VERSION%%+*}"
+          if [[ "${version_core}" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          gh release create "${tag}" --draft \
+            --target "${GITHUB_SHA}" --repo "${GITHUB_REPOSITORY}" \
+            --title "${tag}" --notes "codexe ${PACKAGE_VERSION} for x86_64 Linux GNU." \
+            "${release_flags[@]}"
+          gh release upload "${tag}" \
+            "${GITHUB_WORKSPACE}/dist/codexe-v${PACKAGE_VERSION}-linux-x86_64-unknown-linux-gnu.tar.gz" \
+            "${GITHUB_WORKSPACE}/dist/SHA256SUMS" \
+            "${GITHUB_WORKSPACE}/dist/codexe-release-provenance.json" \
+            --repo "${GITHUB_REPOSITORY}"
+          gh release edit "${tag}" --draft=false --latest=false --repo "${GITHUB_REPOSITORY}"
