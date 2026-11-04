@@ -1,3 +1,7 @@
+> **Historical OpenAI document.** The agreement below refers to contributions
+> to OpenAI Codex. It is retained for reference and is not the contribution
+> agreement for CodeXe. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+
 # Individual Contributor License Agreement (v1.0, OpenAI)
 
 _Based on the Apache Software Foundation Individual CLA v 2.2._

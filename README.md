@@ -1,81 +1,77 @@
-<p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
-<p align="center">
-  <img src="https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />
-</p>
-</br>
-If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="https://developers.openai.com/codex/ide">install in your IDE.</a>
-</br>If you want the desktop app experience, run <code>codex app</code> or visit <a href="https://chatgpt.com/codex?app-landing-page=true">the Codex App page</a>.
-</br>If you are looking for the <em>cloud-based agent</em> from OpenAI, <strong>Codex Web</strong>, go to <a href="https://chatgpt.com/codex">chatgpt.com/codex</a>.</p>
+# CodeXe
 
----
+CodeXe is a community fork of OpenAI Codex with native local
+[Xenolith](https://github.com/simoneiacomino/xenolith) inference.
+It preserves Codex's agent loop, tools, sandbox and approvals, while adding
+local inference status and durable KV sessions.
 
-## Quickstart
+## Quick start
 
-### Installing and running Codex CLI
+On Linux x86_64:
 
-Run the following on Mac or Linux to install Codex CLI:
-
-```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | sh
+```sh
+curl -fsSL https://xenolith.it/install.sh | sh -s -- --interface codexe
 ```
 
-Run the following on Windows to install Codex CLI:
+The installer sets up CodeXe and Xenolith, guides you through model configuration
+or reuses your existing setup, and starts CodeXe.
 
-```shell
-powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+For later sessions, run this from your project directory:
+
+```sh
+codexe
 ```
 
-The standalone installers download from `https://releases.openai.com/codex` by default and fall back to GitHub Releases if a metadata or asset download is unavailable. To force GitHub Releases, set `CODEX_INSTALLER_USE_RELEASES_OPENAI_COM` to `false` (`0` and `no` are also accepted):
+## Build from source
 
-```shell
-curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_INSTALLER_USE_RELEASES_OPENAI_COM=false sh
+On Linux/WSL, install **Rust 1.95.0**, **Python 3.11+**, a C/C++ compiler,
+`pkg-config`, and OpenSSL, libcap and ALSA development headers
+(`libssl-dev`, `libcap-dev`, `libasound2-dev` on Ubuntu).
+Build [Xenolith](https://github.com/simoneiacomino/xenolith#build-from-source)
+and obtain a supported model, then:
+
+```sh
+git clone https://github.com/crrisci/codexe.git
+cd codexe
+python3 scripts/install_codexe.py
+xenolith config init --model /absolute/path/to/model.gguf
+codexe
 ```
 
-```powershell
-$env:CODEX_INSTALLER_USE_RELEASES_OPENAI_COM='false'; irm https://chatgpt.com/codex/install.ps1 | iex
-```
+Skip `config init` if Xenolith is already configured. The engine must be on
+`PATH`, or selected with `XENOLITH_BIN=/absolute/path/to/xenolith`.
+The source installer builds the complete package and installs `codexe` in
+`~/.local/bin`. See [build and install](XENOLITH.md#build-and-install) for
+custom destinations, prebuilt local packages and runtime dependencies, or the
+[container build guide](packaging/README.md) for standalone Linux archives.
 
-Codex CLI can also be installed via the following package managers:
+## Native inference
 
-```shell
-# Install using npm
-npm install -g @openai/codex
-```
+- **Live status:** engine startup, prefill progress, generation speed and cache reuse.
+- **Service discovery:** model, context, output limit and reasoning capabilities.
+- **Vision:** image attachments and `view_image` with a configured projector.
+- **Reasoning:** streamed thoughts and history across tools and resumed sessions.
+- **Durable sessions:** checkpoints, KV restoration and interrupted-turn recovery.
+- **Rewind:** an offline controller previews the context rebuild cost before applying it.
 
-```shell
-# Install using Homebrew
-brew install --cask codex
-```
+Xenolith is the default provider on Linux/WSL. Explicit provider selections take
+precedence. CodeXe uses `~/.codexe` for configuration and conversations;
+`CODEX_HOME` can select another home.
 
-Then simply run `codex` to get started.
+The native integration supports PNG/JPEG images, one per user message or tool
+result. See [current limits](XENOLITH.md#current-limits) for tool compatibility,
+context recovery and platform restrictions.
 
-<details>
-<summary>You can also go to the <a href="https://github.com/openai/codex/releases/latest">latest GitHub Release</a> and download the appropriate binary for your platform.</summary>
+- [Engine configuration, images and reasoning](XENOLITH.md#start-and-configure)
+- [Sessions and inference status](XENOLITH.md#sessions-and-local-telemetry)
+- [Offline rewind](XENOLITH.md#offline-rewind)
+- [Contributing](CONTRIBUTING.md) · [Upstream maintenance](UPSTREAM.md)
 
-Each GitHub Release contains many executables, but in practice, you likely want one of these:
+## License and attribution
 
-- macOS
-  - Apple Silicon/arm64: `codex-aarch64-apple-darwin.tar.gz`
-  - x86_64 (older Mac hardware): `codex-x86_64-apple-darwin.tar.gz`
-- Linux
-  - x86_64: `codex-x86_64-unknown-linux-musl.tar.gz`
-  - arm64: `codex-aarch64-unknown-linux-musl.tar.gz`
+CodeXe is licensed under [Apache-2.0](LICENSE), maintained independently of
+OpenAI and unaffiliated with Intel. [NOTICE](NOTICE) preserves OpenAI and
+third-party and CodeXe attributions; see the [license overview](docs/license.md).
+The [upstream README](README-UPSTREAM.md) documents the integrated OpenAI Codex revision.
 
-Each archive contains a single entry with the platform baked into the name (e.g., `codex-x86_64-unknown-linux-musl`), so you likely want to rename it to `codex` after extracting it.
-
-</details>
-
-### Using Codex with your ChatGPT plan
-
-Run `codex` and select **Sign in with ChatGPT**. We recommend signing into your ChatGPT account to use Codex as part of your Plus, Pro, Business, Edu, or Enterprise plan. [Learn more about what's included in your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-in-chatgpt).
-
-You can also use Codex with an API key, but this requires [additional setup](https://developers.openai.com/codex/auth#sign-in-with-an-api-key).
-
-## Docs
-
-- [**Codex Documentation**](https://developers.openai.com/codex)
-- [**Contributing**](./docs/contributing.md)
-- [**Installing & building**](./docs/install.md)
-- [**Open source fund**](./docs/open-source-fund.md)
-
-This repository is licensed under the [Apache-2.0 License](LICENSE).
+Project website: [xenolith.it](https://xenolith.it).
