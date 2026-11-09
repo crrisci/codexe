@@ -107,7 +107,8 @@ toolchain and ALSA build dependencies; Xenolith consumes the completed archive.
 
 ## Component releases
 
-CodeXe, Xenolith and XenoPi have independent versions. The Xenolith distribution
+CodeXe, Xenolith and XenoPi have independent versions. CodeXe starts its own release
+series at `0.1.0-rc.1`; its version does not track the upstream Codex release. The Xenolith distribution
 manifest selects exact packages and checksums; runtime protocol/capabilities
 decide compatibility. A CodeXe sync does not require a new engine release.
 Keep source revision, package version, artifact checksum and validation results

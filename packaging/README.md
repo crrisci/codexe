@@ -10,7 +10,7 @@ From a selected CodeXe checkout:
 
 ```sh
 python3 scripts/build_linux.py --build-image \
-  --cargo-profile release --package-version 0.163.0-rc.1 \
+  --cargo-profile release --package-version 0.1.0-rc.1 \
   --output /absolute/output/codexe-build
 ```
 
@@ -37,7 +37,7 @@ Verify a completed package's offline activation using its canonical installer:
 
 ```sh
 sh /absolute/output/codexe-build/artifact/install/install.sh --codexe \
-  --package-archive /absolute/output/codexe-build/codexe-v0.163.0-rc.1-linux-x86_64-unknown-linux-gnu.tar.gz \
+  --package-archive /absolute/output/codexe-build/codexe-v0.1.0-rc.1-linux-x86_64-unknown-linux-gnu.tar.gz \
   --prefix /absolute/smoke/prefix --bin-dir /absolute/smoke/bin
 /absolute/smoke/bin/codexe --version
 ```
@@ -56,5 +56,5 @@ Publication creates a draft, attaches all assets, and publishes only after every
 upload succeeds, supporting GitHub immutable releases. A failed upload leaves a
 draft for inspection; no step overwrites an existing release/tag or asset.
 The exact official tag namespace remains `codexe-v<VERSION>`, for example
-`https://github.com/crrisci/codexe/releases/download/codexe-v0.163.0-rc.1/codexe-v0.163.0-rc.1-linux-x86_64-unknown-linux-gnu.tar.gz`.
+`https://github.com/crrisci/codexe/releases/download/codexe-v0.1.0-rc.1/codexe-v0.1.0-rc.1-linux-x86_64-unknown-linux-gnu.tar.gz`.
 Real-engine qualification and maintainer approval are separate from package tests.
