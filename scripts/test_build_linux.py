@@ -47,7 +47,12 @@ class ContainerRecipeTests(unittest.TestCase):
             self.assertIn(f'type=bind,source={out},target=/work', argv)
             self.assertEqual(sum(arg == '--mount' for arg in argv), 1)
             self.assertNotIn('/var/run/docker.sock', ' '.join(argv))
-            self.assertNotIn(str(Path.home()), ' '.join(argv))
+            # A dedicated build directory may itself be under the host home.
+            # Only that directory may be mounted, with a separate container home.
+            self.assertNotIn('-v', argv)
+            self.assertNotIn('--volume', argv)
+            container_env = [argv[i + 1] for i, arg in enumerate(argv) if arg == '-e']
+            self.assertIn('HOME=/work/home', container_env)
             provenance = json.loads((out / 'build-provenance.json').read_text())
             self.assertEqual(provenance['base_commit'], 'a' * 40)
             self.assertEqual(provenance['image_id'], 'sha256:fixture')
